@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title></title>
+    <script>
+   		function MyClass(){
+   			this.name = "멤버변수";
+   		}
+   		
+   		MyClass.prototype.showName=function(){
+   			document.write("name = " +this.name);
+   		}
+   		
+   		var objClass = new MyClass();
+   		objClass.showName();
+    </script>
+</head>
+<body>
+
+</body>
+</html>
