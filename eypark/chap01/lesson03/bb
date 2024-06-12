@@ -1,0 +1,110 @@
+public class MyDto {
+    private String key;
+    private String value;
+
+    // Getters and setters
+    public String getKey() {
+        return key;
+    }
+
+    public void setKey(String key) {
+        this.key = key;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+}
+
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpConnectionClient {
+
+    public String sendData(String targetUrl, MyDto data, String param1, String param2) throws Exception {
+        // URL에 파라미터 추가
+        String urlWithParams = targetUrl + "?param1=" + param1 + "&param2=" + param2;
+        URL url = new URL(urlWithParams);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        
+        // 요청 메서드 및 헤더 설정
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/json; utf-8");
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setDoOutput(true);
+
+        // DTO 객체를 JSON 문자열로 직렬화
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonInputString = objectMapper.writeValueAsString(data);
+
+        // JSON 데이터를 요청 본문에 작성
+        try (OutputStream os = connection.getOutputStream()) {
+            byte[] input = jsonInputString.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+
+        // 응답 코드 확인
+        int code = connection.getResponseCode();
+        System.out.println("HTTP Response Code: " + code);
+
+        // 응답 읽기
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), "utf-8"))) {
+            StringBuilder response = new StringBuilder();
+            String responseLine;
+            while ((responseLine = br.readLine()) != null) {
+                response.append(responseLine.trim());
+            }
+            return response.toString();
+        }
+    }
+
+    public static void main(String[] args) {
+        HttpConnectionClient client = new HttpConnectionClient();
+        String targetUrl = "http://localhost:8080/endpoint";  // 수신 서버 URL
+        MyDto data = new MyDto();
+        data.setKey("exampleKey");
+        data.setValue("exampleValue");
+        String param1 = "value1";
+        String param2 = "value2";
+
+        try {
+            String response = client.sendData(targetUrl, data, param1, param2);
+            System.out.println("Response: " + response);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class ReceiveController {
+
+    @PostMapping("/endpoint")
+    public String receiveData(@RequestBody MyDto data,
+                              @RequestParam String param1,
+                              @RequestParam String param2) {
+        // URL 파라미터 및 데이터 처리 로직
+        System.out.println("Received data: " + data.getKey() + ", " + data.getValue());
+        System.out.println("Received param1: " + param1);
+        System.out.println("Received param2: " + param2);
+        return "Data received successfully";
+    }
+}
+
