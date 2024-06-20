@@ -1,0 +1,120 @@
+Spring Boot 애플리케이션에서 Impala와 MyBatis를 사용하여 쿼리 로그가 출력되지 않는 경우, 몇 가지 설정을 확인하고 조정할 수 있습니다. 아래 단계를 따라 확인해보세요.
+
+### 1. MyBatis 로그 설정 확인
+
+`application.properties` 파일에 MyBatis 로그 설정이 제대로 되어 있는지 확인합니다.
+
+```properties
+# MyBatis 로그 설정
+mybatis.configuration.log-impl=org.apache.ibatis.logging.stdout.StdOutImpl
+```
+
+또는 SLF4J를 사용하려면 다음과 같이 설정합니다:
+
+```properties
+mybatis.configuration.log-impl=org.apache.ibatis.logging.slf4j.Slf4jImpl
+```
+
+### 2. Logback 설정 확인
+
+SLF4J를 사용하고 있다면 Logback 설정이 필요합니다. `src/main/resources/logback-spring.xml` 파일이 올바르게 설정되어 있는지 확인합니다.
+
+#### `src/main/resources/logback-spring.xml` 파일:
+
+```xml
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="org.apache.ibatis" level="DEBUG" />
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>
+```
+
+여기서 `org.apache.ibatis` 로거의 로그 레벨이 `DEBUG`로 설정되어 있는지 확인합니다.
+
+### 3. 의존성 추가 확인
+
+프로젝트의 `pom.xml` 파일에 필요한 의존성이 추가되어 있는지 확인합니다. 특히 Logback과 SLF4J 관련 의존성이 있는지 확인하세요.
+
+#### `pom.xml` 파일:
+
+```xml
+<dependencies>
+    <!-- MyBatis Spring Boot Starter -->
+    <dependency>
+        <groupId>org.mybatis.spring.boot</groupId>
+        <artifactId>mybatis-spring-boot-starter</artifactId>
+        <version>2.2.0</version>
+    </dependency>
+
+    <!-- Impala JDBC Driver -->
+    <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-jdbc</artifactId>
+        <version>2.1.1</version>
+    </dependency>
+
+    <!-- Logback Classic for SLF4J -->
+    <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>1.2.3</version>
+    </dependency>
+</dependencies>
+```
+
+### 4. 디버그 로깅 활성화
+
+Spring Boot 애플리케이션을 실행할 때 디버그 모드를 활성화하여 더 많은 로그 정보를 확인할 수 있습니다. `application.properties` 파일에 다음 설정을 추가합니다:
+
+```properties
+logging.level.org.springframework.jdbc.core=DEBUG
+logging.level.org.mybatis=DEBUG
+logging.level.com.example=DEBUG  # com.example을 실제 패키지명으로 변경
+```
+
+### 5. MyBatis Config 클래스
+
+MyBatis 설정 클래스에서 로깅을 제대로 설정했는지 확인합니다. `src/main/java/com/example/config/MyBatisConfig.java` 파일을 확인하세요.
+
+#### `src/main/java/com/example/config/MyBatisConfig.java` 파일:
+
+```java
+package com.example.config;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.SqlSessionFactoryBean;
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
+
+@Configuration
+@MapperScan("com.example.mapper")  // 여기를 실제 패키지명으로 변경
+public class MyBatisConfig {
+
+    @Bean
+    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource);
+        return sessionFactory.getObject();
+    }
+}
+```
+
+### 6. 최종 확인
+
+위 설정을 모두 확인하고, Spring Boot 애플리케이션을 다시 실행합니다. 로그가 출력되지 않는다면, 다음과 같은 부분도 점검해보세요:
+
+- Impala JDBC 드라이버가 제대로 작동하는지 확인합니다.
+- MyBatis Mapper 인터페이스와 XML 파일이 올바르게 매핑되어 있는지 확인합니다.
+- `application.properties` 파일에 설정이 올바른지 확인합니다.
+
+그래도 문제가 해결되지 않는다면, 문제가 발생하는 구체적인 부분이나 오류 메시지를 공유해주시면 더 자세한 도움을 드릴 수 있습니다.
