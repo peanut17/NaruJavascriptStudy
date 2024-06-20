@@ -1,0 +1,232 @@
+더 자세히 설명해 드리겠습니다. Spring Boot 애플리케이션에서 Impala JDBC와 MyBatis를 사용하여 쿼리 로그를 출력하는 전체 과정을 단계별로 살펴보겠습니다.
+
+### 1. 의존성 추가
+
+먼저, `pom.xml` 파일에 필요한 의존성을 추가합니다. MyBatis Spring Boot Starter와 Impala JDBC 드라이버를 추가합니다.
+
+#### `pom.xml` 파일:
+
+```xml
+<dependencies>
+    <!-- MyBatis Spring Boot Starter -->
+    <dependency>
+        <groupId>org.mybatis.spring.boot</groupId>
+        <artifactId>mybatis-spring-boot-starter</artifactId>
+        <version>2.2.0</version>
+    </dependency>
+
+    <!-- Impala JDBC Driver -->
+    <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-jdbc</artifactId>
+        <version>2.1.1</version>
+    </dependency>
+</dependencies>
+```
+
+### 2. 데이터 소스 설정
+
+`application.properties` 파일에서 데이터베이스 연결 정보와 MyBatis 로그 설정을 추가합니다.
+
+#### `src/main/resources/application.properties` 파일:
+
+```properties
+# 데이터 소스 설정
+spring.datasource.url=jdbc:impala://your-impala-host:21050/your-database
+spring.datasource.username=your-username
+spring.datasource.password=your-password
+spring.datasource.driver-class-name=org.apache.hive.jdbc.HiveDriver
+
+# MyBatis 로그 설정
+mybatis.configuration.log-impl=org.apache.ibatis.logging.stdout.StdOutImpl
+```
+
+### 3. MyBatis 설정 클래스
+
+MyBatis와 Spring Boot를 통합하기 위한 설정 클래스를 작성합니다. 이 클래스에서는 데이터 소스를 설정하고, MyBatis의 SQL 세션 팩토리를 구성합니다.
+
+#### `src/main/java/com/example/config/MyBatisConfig.java` 파일:
+
+```java
+package com.example.config;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.SqlSessionFactoryBean;
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
+
+@Configuration
+@MapperScan("com.example.mapper")  // 여기를 실제 패키지명으로 변경
+public class MyBatisConfig {
+
+    @Bean
+    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource);
+        return sessionFactory.getObject();
+    }
+}
+```
+
+### 4. Mapper 인터페이스 및 XML 파일
+
+쿼리를 작성하는 Mapper 인터페이스와 XML 파일을 설정합니다.
+
+#### Mapper 인터페이스:
+
+```java
+package com.example.mapper;
+
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
+import java.util.List;
+
+@Mapper
+public interface MyMapper {
+
+    @Select("SELECT * FROM your_table")
+    List<YourModel> getAllRecords();
+}
+```
+
+#### Mapper XML 파일 (resources/mapper/MyMapper.xml):
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.MyMapper">
+
+    <select id="getAllRecords" resultType="com.example.model.YourModel">
+        SELECT * FROM your_table
+    </select>
+
+</mapper>
+```
+
+### 5. 모델 클래스
+
+쿼리 결과를 매핑할 모델 클래스를 작성합니다.
+
+#### `src/main/java/com/example/model/YourModel.java` 파일:
+
+```java
+package com.example.model;
+
+public class YourModel {
+    private int id;
+    private String name;
+
+    // getters and setters
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+```
+
+### 6. 서비스 및 컨트롤러
+
+Mapper 인터페이스를 사용하는 서비스 및 컨트롤러 클래스를 작성합니다.
+
+#### 서비스 클래스:
+
+```java
+package com.example.service;
+
+import com.example.mapper.MyMapper;
+import com.example.model.YourModel;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class MyService {
+
+    private final MyMapper myMapper;
+
+    public MyService(MyMapper myMapper) {
+        this.myMapper = myMapper;
+    }
+
+    public List<YourModel> getAllRecords() {
+        return myMapper.getAllRecords();
+    }
+}
+```
+
+#### 컨트롤러 클래스:
+
+```java
+package com.example.controller;
+
+import com.example.model.YourModel;
+import com.example.service.MyService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class MyController {
+
+    private final MyService myService;
+
+    public MyController(MyService myService) {
+        this.myService = myService;
+    }
+
+    @GetMapping("/records")
+    public List<YourModel> getAllRecords() {
+        return myService.getAllRecords();
+    }
+}
+```
+
+### 7. 로그 확인
+
+애플리케이션을 실행하면 콘솔에 MyBatis 쿼리 로그가 출력되는 것을 확인할 수 있습니다. MyBatis 쿼리 로그는 `StdOutImpl` 설정 덕분에 표준 출력으로 표시됩니다.
+
+### 추가: SLF4J를 사용한 로그 출력
+
+표준 출력 대신 SLF4J를 통해 로그를 출력하려면 `application.properties` 파일에 다음 설정을 추가할 수 있습니다.
+
+```properties
+mybatis.configuration.log-impl=org.apache.ibatis.logging.slf4j.Slf4jImpl
+```
+
+그리고 `src/main/resources/logback-spring.xml` 파일을 사용하여 로그백 설정을 구성합니다.
+
+#### `src/main/resources/logback-spring.xml` 파일:
+
+```xml
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="org.apache.ibatis" level="DEBUG" />
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>
+```
+
+이 설정을 통해 MyBatis와 Impala JDBC 쿼리 로그를 콘솔에 출력할 수 있습니다. 필요한 경우 로그 레벨을 조정하여 더 많은 디버그 정보를 출력할 수 있습니다.
