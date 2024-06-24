@@ -1,0 +1,70 @@
+Apache Spark와 Apache Kudu를 사용하여 데이터를 Kudu 테이블에 삽입하는 Python 코드를 작성하려면 다음 단계를 따르십시오. 이 코드에서는 PySpark 및 Kudu의 Spark 커넥터를 사용합니다.
+
+1. **PySpark와 Kudu Spark 커넥터 설치**:
+   - PySpark를 설치하려면 다음을 실행하십시오:
+     ```sh
+     pip install pyspark
+     ```
+   - Kudu Spark 커넥터를 설치하려면, Spark 패키지를 통해 추가해야 합니다.
+
+2. **Kudu 서버와 테이블 설정**:
+   - Kudu 서버가 실행 중인지 확인합니다.
+   - 테이블이 Kudu에 존재해야 합니다. 존재하지 않으면 테이블을 생성해야 합니다.
+
+3. **Spark 세션 생성 및 데이터 삽입 코드 작성**:
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+import kudu
+from kudu.client import Partitioning
+
+# Spark 세션 생성
+spark = SparkSession.builder \
+    .appName("KuduIntegration") \
+    .config("spark.jars.packages", "org.apache.kudu:kudu-spark2_2.11:1.10.0") \
+    .getOrCreate()
+
+# Kudu 클라이언트 설정
+kudu_master = "kudu_master_address:7051"  # Kudu 마스터 서버 주소
+kudu_client = kudu.connect(kudu_master)
+
+# Kudu 테이블 이름
+kudu_table = "example_table"
+
+# 스키마 정의
+schema = StructType([
+    StructField("id", IntegerType(), True),
+    StructField("name", StringType(), True)
+])
+
+# 예제 데이터 준비
+data = [
+    (1, "Alice"),
+    (2, "Bob"),
+    (3, "Charlie")
+]
+
+# Spark DataFrame 생성
+df = spark.createDataFrame(data, schema)
+
+# 데이터 Kudu에 삽입
+df.write \
+    .format("kudu") \
+    .option("kudu.master", kudu_master) \
+    .option("kudu.table", kudu_table) \
+    .mode("append") \
+    .save()
+
+print("Data inserted successfully into Kudu table.")
+
+spark.stop()
+```
+
+이 코드의 주요 부분은 다음과 같습니다:
+
+- **Spark 세션 생성**: Kudu Spark 커넥터를 포함하여 Spark 세션을 생성합니다.
+- **Kudu 클라이언트 설정**: Kudu 클라이언트를 사용하여 Kudu 마스터 서버에 연결합니다.
+- **데이터 프레임 생성 및 삽입**: Spark DataFrame을 생성하고 `write` 메서드를 사용하여 Kudu 테이블에 데이터를 삽입합니다.
+
+이 코드가 정상적으로 실행되려면 Kudu가 이미 설치되어 있고 실행 중이어야 하며, 테이블이 Kudu에 존재해야 합니다. 테이블이 없다면 Kudu 클라이언트를 사용하여 테이블을 먼저 생성해야 합니다.
