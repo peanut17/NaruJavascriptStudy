@@ -68,3 +68,103 @@ spark.stop()
 - **데이터 프레임 생성 및 삽입**: Spark DataFrame을 생성하고 `write` 메서드를 사용하여 Kudu 테이블에 데이터를 삽입합니다.
 
 이 코드가 정상적으로 실행되려면 Kudu가 이미 설치되어 있고 실행 중이어야 하며, 테이블이 Kudu에 존재해야 합니다. 테이블이 없다면 Kudu 클라이언트를 사용하여 테이블을 먼저 생성해야 합니다.
+
+
+Kafka의 토픽 데이터에서 'before'와 'after' 데이터를 비교하여 차이점을 계산하고, 그 결과를 Kudu에 삽입하는 PySpark 코드를 작성해 보겠습니다. 이 과정은 다음 단계로 나눌 수 있습니다:
+
+1. **PySpark 및 필요한 패키지 설치**:
+   ```sh
+   pip install pyspark
+   pip install kafka-python
+   ```
+
+2. **Spark 세션 생성 및 Kafka 스트리밍 설정**:
+   - Kafka에서 데이터를 읽고, 'before'와 'after' 데이터를 비교하여 차이점을 계산한 후, Kudu에 삽입합니다.
+
+3. **'before'와 'after' 차이점을 계산하고 Kudu에 삽입하는 코드 작성**:
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, expr
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, MapType
+
+# Spark 세션 생성
+spark = SparkSession.builder \
+    .appName("KafkaToKuduDiff") \
+    .config("spark.jars.packages", "org.apache.kudu:kudu-spark2_2.11:1.10.0,org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.0") \
+    .getOrCreate()
+
+# Kafka와 Kudu 설정
+kafka_bootstrap_servers = "kafka_broker_address:9092"
+kafka_topic = "example_topic"
+kudu_master = "kudu_master_address:7051"
+kudu_table = "diff_table"
+
+# Kafka 스트리밍 데이터 읽기
+df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", kafka_bootstrap_servers) \
+    .option("subscribe", kafka_topic) \
+    .load()
+
+# 메시지 값은 기본적으로 바이트 배열로 저장되므로 문자열로 변환
+df = df.selectExpr("CAST(value AS STRING) as json_value")
+
+# JSON 스키마 정의 (Kafka 메시지가 JSON 형식으로 'before'와 'after' 데이터를 포함한다고 가정)
+json_schema = StructType([
+    StructField("before", MapType(StringType(), StringType()), True),
+    StructField("after", MapType(StringType(), StringType()), True)
+])
+
+# JSON 데이터 파싱
+parsed_df = df.select(from_json(col("json_value"), json_schema).alias("data")).select("data.*")
+
+# 'before'와 'after'의 차이점 계산 함수
+def calculate_diff(before, after):
+    differences = {}
+    all_keys = set(before.keys()).union(set(after.keys()))
+    for key in all_keys:
+        before_value = before.get(key, None)
+        after_value = after.get(key, None)
+        if before_value != after_value:
+            differences[key] = {"before": before_value, "after": after_value}
+    return differences
+
+# UDF 등록
+from pyspark.sql.functions import udf
+from pyspark.sql.types import MapType, StructType, StructField, StringType
+
+diff_schema = MapType(StringType(), StructType([StructField("before", StringType()), StructField("after", StringType())]))
+diff_udf = udf(calculate_diff, diff_schema)
+
+# 차이점 컬럼 추가
+diff_df = parsed_df.withColumn("diff", diff_udf(col("before"), col("after")))
+
+# 차이점 데이터를 Kudu에 쓰기
+query = diff_df.selectExpr("CAST(id AS STRING) as key", "diff") \
+    .writeStream \
+    .format("kudu") \
+    .option("kudu.master", kudu_master) \
+    .option("kudu.table", kudu_table) \
+    .outputMode("append") \
+    .option("checkpointLocation", "/tmp/kafka_to_kudu_checkpoint") \
+    .start()
+
+# 스트리밍 쿼리 실행
+query.awaitTermination()
+```
+
+이 코드는 다음 단계를 포함합니다:
+
+1. **Spark 세션 생성**: 필요한 패키지들을 포함하여 Spark 세션을 생성합니다.
+2. **Kafka 스트리밍 데이터 읽기**: Kafka에서 데이터를 스트리밍으로 읽습니다.
+3. **JSON 파싱**: Kafka 메시지가 JSON 형식이라고 가정하고, 이를 파싱합니다.
+4. **차이점 계산**: 'before'와 'after' 데이터를 비교하여 차이점을 계산하는 사용자 정의 함수(UDF)를 정의하고 등록합니다.
+5. **Kudu에 데이터 쓰기**: 차이점을 Kudu 테이블에 삽입합니다.
+
+**주의사항**:
+- Kafka, Kudu 서버의 주소와 포트를 적절하게 변경해야 합니다.
+- Kafka 토픽과 Kudu 테이블 스키마가 일치해야 합니다.
+- `checkpointLocation`을 설정하여 스트리밍 상태를 체크포인트할 경로를 지정해야 합니다. 이 경로는 Spark가 스트리밍 상태를 저장하는 데 사용됩니다.
+- `spark.jars.packages` 옵션은 Spark 및 Kudu, Kafka 커넥터 버전에 맞게 조정해야 합니다.
+- Kudu 테이블은 미리 생성되어 있어야 하며, 스키마가 `diff` 데이터에 맞게 설정되어 있어야 합니다.
