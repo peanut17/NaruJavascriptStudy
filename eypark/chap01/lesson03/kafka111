@@ -1,0 +1,119 @@
+Spring Boot 애플리케이션에서 Kafka와 Kerberos 키탭을 사용하여 인증을 설정하는 방법을 안내드리겠습니다. 이 설정은 보안이 필요한 Kafka 클러스터에 접근할 때 주로 사용됩니다.
+
+### 설정 단계
+
+1. **필요한 종속성 추가**:
+    - `spring-kafka`와 `spring-boot-starter-security`를 포함하여 Spring Boot 프로젝트의 `pom.xml` 또는 `build.gradle`에 필요한 종속성을 추가합니다.
+    ```xml
+    <!-- For Maven (pom.xml) -->
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    ```
+
+    ```groovy
+    // For Gradle (build.gradle)
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    ```
+
+2. **JAAS 구성 파일 생성**:
+    - `kafka_client_jaas.conf` 파일을 생성하여 JAAS 설정을 정의합니다.
+    ```plaintext
+    KafkaClient {
+        com.sun.security.auth.module.Krb5LoginModule required
+        useKeyTab=true
+        keyTab="/path/to/your.keytab"
+        storeKey=true
+        useTicketCache=false
+        principal="your_principal@YOUR_REALM";
+    };
+    ```
+
+3. **Kafka 구성**:
+    - Spring Boot의 `application.properties` 또는 `application.yml` 파일에 Kafka 관련 설정을 추가합니다.
+    ```properties
+    spring.kafka.bootstrap-servers=your_kafka_broker:9092
+    spring.kafka.properties.security.protocol=SASL_PLAINTEXT
+    spring.kafka.properties.sasl.mechanism=GSSAPI
+    spring.kafka.properties.sasl.kerberos.service.name=kafka
+    spring.kafka.properties.sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \
+        useKeyTab=true \
+        keyTab="/path/to/your.keytab" \
+        storeKey=true \
+        useTicketCache=false \
+        principal="your_principal@YOUR_REALM";
+    ```
+
+4. **Kerberos 설정**:
+    - `krb5.conf` 파일이 적절한 위치에 있고, 이 파일에서 KDC와 Realm 설정이 올바르게 되어 있는지 확인합니다.
+    ```plaintext
+    [libdefaults]
+        default_realm = YOUR_REALM
+
+    [realms]
+        YOUR_REALM = {
+            kdc = your_kdc_server
+            admin_server = your_admin_server
+        }
+
+    [domain_realm]
+        .yourdomain.com = YOUR_REALM
+        yourdomain.com = YOUR_REALM
+    ```
+
+5. **Spring Kafka 설정 클래스 작성**:
+    - Kafka 설정을 위한 Java 클래스를 작성합니다.
+    ```java
+    import org.apache.kafka.clients.consumer.ConsumerConfig;
+    import org.apache.kafka.common.serialization.StringDeserializer;
+    import org.springframework.context.annotation.Bean;
+    import org.springframework.context.annotation.Configuration;
+    import org.springframework.kafka.annotation.EnableKafka;
+    import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+    import org.springframework.kafka.core.ConsumerFactory;
+    import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+    import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+
+    import java.util.HashMap;
+    import java.util.Map;
+
+    @EnableKafka
+    @Configuration
+    public class KafkaConsumerConfig {
+
+        @Bean
+        public ConsumerFactory<String, String> consumerFactory() {
+            Map<String, Object> props = new HashMap<>();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "your_kafka_broker:9092");
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, "your_group_id");
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+            props.put("security.protocol", "SASL_PLAINTEXT");
+            props.put("sasl.mechanism", "GSSAPI");
+            props.put("sasl.kerberos.service.name", "kafka");
+            props.put("sasl.jaas.config", "com.sun.security.auth.module.Krb5LoginModule required "
+                    + "useKeyTab=true "
+                    + "keyTab=\"/path/to/your.keytab\" "
+                    + "storeKey=true "
+                    + "useTicketCache=false "
+                    + "principal=\"your_principal@YOUR_REALM\";");
+            return new DefaultKafkaConsumerFactory<>(props);
+        }
+
+        @Bean
+        public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+            ConcurrentKafkaListenerContainerFactory<String, String> factory =
+                    new ConcurrentKafkaListenerContainerFactory<>();
+            factory.setConsumerFactory(consumerFactory());
+            return factory;
+        }
+    }
+    ```
+
+이와 같은 설정을 통해 Spring Boot 애플리케이션에서 Kerberos 인증을 사용하여 Kafka 클러스터와 통신할 수 있습니다. 모든 경로와 설정값을 실제 환경에 맞게 변경해야 합니다.
