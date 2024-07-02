@@ -1,0 +1,193 @@
+Spring Boot 애플리케이션에서 실시간으로 Kafka의 여러 토픽을 소비하고, 소비한 데이터를 분류하여 각각의 처리 로직을 적용하는 방법을 안내드리겠습니다. 이 예제는 Kafka 토픽을 각각의 리스너로 분리하여 메시지를 처리하고, Apache Kudu에 삽입하는 예제를 포함합니다.
+
+### 프로젝트 설정
+
+#### 1. 종속성 추가
+`pom.xml` (Maven) 또는 `build.gradle` (Gradle)에 필요한 종속성을 추가합니다.
+
+```xml
+<!-- pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.kudu</groupId>
+        <artifactId>kudu-client</artifactId>
+        <version>1.16.0</version> <!-- Kudu 클라이언트 버전에 따라 변경 -->
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+</dependencies>
+```
+
+```groovy
+// build.gradle
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.apache.kudu:kudu-client:1.16.0' // Kudu 클라이언트 버전에 따라 변경
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+}
+```
+
+#### 2. Kafka 및 Kerberos 설정
+`application.properties` 또는 `application.yml`에 Kafka와 Kerberos 관련 설정을 추가합니다.
+
+```properties
+# application.properties
+spring.kafka.bootstrap-servers=your_kafka_broker:9092
+spring.kafka.consumer.group-id=your_group_id
+spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.properties.sasl.mechanism=GSSAPI
+spring.kafka.properties.sasl.kerberos.service.name=kafka
+spring.kafka.properties.sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \
+    useKeyTab=true \
+    keyTab="/path/to/your.keytab" \
+    storeKey=true \
+    useTicketCache=false \
+    principal="your_principal@YOUR_REALM";
+```
+
+#### 3. Kafka Consumer 설정
+Kafka에서 데이터를 소비하고, 이를 처리하는 Spring Kafka 설정 클래스를 작성합니다.
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@EnableKafka
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "your_kafka_broker:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "your_group_id");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put("security.protocol", "SASL_PLAINTEXT");
+        props.put("sasl.mechanism", "GSSAPI");
+        props.put("sasl.kerberos.service.name", "kafka");
+        props.put("sasl.jaas.config", "com.sun.security.auth.module.Krb5LoginModule required "
+                + "useKeyTab=true "
+                + "keyTab=\"/path/to/your.keytab\" "
+                + "storeKey=true "
+                + "useTicketCache=false "
+                + "principal=\"your_principal@YOUR_REALM\";");
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+}
+```
+
+#### 4. Kudu 클라이언트 설정
+Apache Kudu 클라이언트를 설정하고, Kafka에서 데이터를 받아 Kudu에 삽입하는 로직을 작성합니다.
+
+```java
+import org.apache.kudu.client.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class KuduClientConfig {
+
+    private static final String KUDU_MASTER = "your_kudu_master_server";
+
+    @Bean
+    public KuduClient kuduClient() {
+        return new KuduClient.KuduClientBuilder(KUDU_MASTER).build();
+    }
+
+    @Bean
+    public KuduTable kuduTable(KuduClient kuduClient) throws KuduException {
+        return kuduClient.openTable("your_table_name");
+    }
+}
+```
+
+#### 5. Kafka 메시지 처리 및 Kudu에 데이터 삽입
+Kafka 리스너를 작성하여 Kafka 메시지를 소비하고, 이를 Kudu에 삽입합니다.
+
+```java
+import org.apache.kudu.client.*;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KafkaKuduService {
+
+    private final KuduClient kuduClient;
+    private final KuduTable kuduTable;
+
+    public KafkaKuduService(KuduClient kuduClient, KuduTable kuduTable) {
+        this.kuduClient = kuduClient;
+        this.kuduTable = kuduTable;
+    }
+
+    @KafkaListener(topics = "new_topic1", groupId = "your_group_id")
+    public void listenTopic1(String message) {
+        processMessage(message, "new_topic1");
+    }
+
+    @KafkaListener(topics = "new_topic2", groupId = "your_group_id")
+    public void listenTopic2(String message) {
+        processMessage(message, "new_topic2");
+    }
+
+    @KafkaListener(topics = "new_topic3", groupId = "your_group_id")
+    public void listenTopic3(String message) {
+        processMessage(message, "new_topic3");
+    }
+
+    private void processMessage(String message, String topic) {
+        try {
+            Insert insert = kuduTable.newInsert();
+            PartialRow row = insert.getRow();
+            // Assuming the table has columns "id", "topic", and "value"
+            row.addInt("id", generateId());
+            row.addString("topic", topic);
+            row.addString("value", message);
+            kuduClient.newSession().apply(insert);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private int generateId() {
+        // Implement ID generation logic or use auto-increment
+        return 0;
+    }
+}
+```
+
+### 6. 애플리케이션 실행
+Spring Boot 애플리케이션을 실행하여 Kafka의 메시지를 소비하고, 이를 Apache Kudu 테이블에 삽입합니다.
+
+위의 단계들을 따르면 Spring Boot 애플리케이션에서 여러 Kafka 토픽을 Kerberos 인증을 통해 실시간으로 소비하고, Apache Kudu에 데이터를 삽입할 수 있습니다. 모든 경로와 설정값을 실제 환경에 맞게 변경해야 합니다.
