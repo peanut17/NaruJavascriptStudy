@@ -1,0 +1,150 @@
+Spring Boot 애플리케이션에서 Kafka와 Kerberos 통합을 위해 외부 `jaas.conf` 파일을 사용하는 방법을 안내드리겠습니다. 이 파일을 통해 Kerberos 인증 설정을 외부화하여 관리할 수 있습니다.
+
+### 1. JAAS 설정 파일 생성
+
+우선, `jaas.conf` 파일을 생성합니다. 이 파일에 Kerberos 인증에 필요한 설정을 작성합니다.
+
+예를 들어, `src/main/resources/jaas.conf` 파일을 생성하고 다음과 같이 설정합니다:
+
+```properties
+KafkaClient {
+   com.sun.security.auth.module.Krb5LoginModule required
+   useKeyTab=true
+   keyTab="/path/to/your.keytab"
+   storeKey=true
+   useTicketCache=false
+   principal="your_principal@YOUR_REALM";
+};
+```
+
+### 2. Spring Boot 애플리케이션에 JAAS 설정 파일 적용
+
+`jaas.conf` 파일을 사용하도록 Spring Boot 애플리케이션을 구성합니다. `application.properties` 파일 또는 환경 변수에서 `java.security.auth.login.config` 시스템 속성을 설정합니다.
+
+#### 2.1 `application.properties` 파일에서 설정
+
+`application.properties` 파일에 다음 설정을 추가합니다:
+
+```properties
+# application.properties
+spring.kafka.bootstrap-servers=your_kafka_broker:9092
+spring.kafka.consumer.group-id=your_group_id
+spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.properties.sasl.mechanism=GSSAPI
+spring.kafka.properties.sasl.kerberos.service.name=kafka
+
+# JAAS 설정 파일 경로
+java.security.auth.login.config=src/main/resources/jaas.conf
+```
+
+#### 2.2 시스템 속성으로 설정
+
+또는, 시스템 속성으로 설정할 수도 있습니다. 이는 애플리케이션을 실행할 때 시스템 속성으로 `jaas.conf` 파일 경로를 지정하는 방법입니다:
+
+```bash
+java -Djava.security.auth.login.config=src/main/resources/jaas.conf -jar your-spring-boot-app.jar
+```
+
+### 3. Kafka Consumer 설정
+
+Kafka 소비자 설정 클래스에서 `jaas.conf` 파일을 사용하는 방법을 설명합니다.
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@EnableKafka
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "your_kafka_broker:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "your_group_id");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put("security.protocol", "SASL_PLAINTEXT");
+        props.put("sasl.mechanism", "GSSAPI");
+        props.put("sasl.kerberos.service.name", "kafka");
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+}
+```
+
+### 4. Kafka 메시지 처리 및 Kudu에 데이터 삽입
+
+이전에 작성한 `KafkaKuduService` 클래스에서 Kafka 메시지를 소비하고 Kudu에 데이터를 삽입하는 로직을 그대로 사용합니다.
+
+```java
+import org.apache.kudu.client.*;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KafkaKuduService {
+
+    private final KuduClient kuduClient;
+    private final KuduTable kuduTable;
+
+    public KafkaKuduService(KuduClient kuduClient, KuduTable kuduTable) {
+        this.kuduClient = kuduClient;
+        this.kuduTable = kuduTable;
+    }
+
+    @KafkaListener(topics = "new_topic1", groupId = "your_group_id")
+    public void listenTopic1(String message) {
+        processMessage(message, "new_topic1");
+    }
+
+    @KafkaListener(topics = "new_topic2", groupId = "your_group_id")
+    public void listenTopic2(String message) {
+        processMessage(message, "new_topic2");
+    }
+
+    @KafkaListener(topics = "new_topic3", groupId = "your_group_id")
+    public void listenTopic3(String message) {
+        processMessage(message, "new_topic3");
+    }
+
+    private void processMessage(String message, String topic) {
+        try {
+            Insert insert = kuduTable.newInsert();
+            PartialRow row = insert.getRow();
+            // Assuming the table has columns "id", "topic", and "value"
+            row.addInt("id", generateId());
+            row.addString("topic", topic);
+            row.addString("value", message);
+            kuduClient.newSession().apply(insert);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private int generateId() {
+        // Implement ID generation logic or use auto-increment
+        return 0;
+    }
+}
+```
+
+이렇게 설정하면 `jaas.conf` 파일을 외부에서 불러와 Kerberos 인증을 사용할 수 있습니다. 모든 설정 경로와 값을 실제 환경에 맞게 변경해야 합니다.
