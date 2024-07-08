@@ -1,0 +1,315 @@
+Kafka에서 데이터를 읽어와서 이를 가공한 후 Kudu 테이블에 삽입하는 방법은 여러 단계로 구성됩니다. 이 과정은 다음과 같습니다:
+
+1. Kafka로부터 데이터를 읽어오기.
+2. 데이터를 가공하기.
+3. 가공된 데이터를 Kudu 테이블에 삽입하기.
+
+이를 구현하기 위해 Spring Boot를 사용하고, Kafka와 Kudu의 클라이언트를 활용합니다.
+
+### 1. 의존성 추가
+
+먼저 `pom.xml` 파일에 필요한 의존성을 추가합니다. Kafka, Kudu 클라이언트와 Spring Kafka 관련 의존성을 추가합니다:
+
+```xml
+<dependencies>
+    <!-- Spring Kafka -->
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+        <version>2.8.0</version>
+    </dependency>
+
+    <!-- Apache Kudu Client -->
+    <dependency>
+        <groupId>org.apache.kudu</groupId>
+        <artifactId>kudu-client</artifactId>
+        <version>1.15.0</version>
+    </dependency>
+</dependencies>
+```
+
+### 2. Kafka 설정
+
+Kafka 설정을 위한 구성 파일을 작성합니다. 예를 들어, `application.yml` 파일에 다음과 같이 Kafka 설정을 추가할 수 있습니다:
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: group_id
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+```
+
+### 3. Kudu 클라이언트 설정
+
+Kudu 클라이언트를 구성합니다. 예제에서 이미 본 `KuduConfig` 클래스를 사용합니다:
+
+```java
+import org.apache.kudu.client.KuduClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class KuduConfig {
+
+    @Bean
+    public KuduClient kuduClient() {
+        return new KuduClient.KuduClientBuilder("kudu-master:7051").build();
+    }
+}
+```
+
+### 4. Kafka Consumer 설정
+
+Kafka 메시지를 소비하는 `KafkaConsumerConfig` 클래스를 작성합니다:
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@EnableKafka
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group_id");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+}
+```
+
+### 5. Kafka Listener와 Kudu 인서트 로직
+
+Kafka 메시지를 처리하고 Kudu 테이블에 데이터를 삽입하는 서비스를 작성합니다:
+
+```java
+import org.apache.kudu.client.KuduClient;
+import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.KuduSession;
+import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.client.PartialRow;
+import org.apache.kudu.client.Upsert;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KafkaKuduService {
+
+    @Autowired
+    private KuduClient kuduClient;
+
+    @KafkaListener(topics = "your_topic_name", groupId = "group_id")
+    public void consume(String message) {
+        // 메시지를 가공합니다
+        String[] parts = message.split(",");
+        String userId = parts[0];
+        String name = parts[1];
+        int age = Integer.parseInt(parts[2]);
+
+        try {
+            insertIntoKudu(userId, name, age);
+        } catch (KuduException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void insertIntoKudu(String userId, String name, int age) throws KuduException {
+        String tableName = "user_table";
+
+        KuduTable table = kuduClient.openTable(tableName);
+        KuduSession session = kuduClient.newSession();
+
+        Upsert upsert = table.newUpsert();
+        PartialRow row = upsert.getRow();
+        row.addString("user_id", userId);
+        row.addString("name", name);
+        row.addInt("age", age);
+
+        session.apply(upsert);
+        session.close();
+    }
+}
+```
+
+### 6. 애플리케이션 실행
+
+이제 Spring Boot 애플리케이션을 실행하면 Kafka 토픽에서 메시지를 소비하고, 이를 가공하여 Kudu 테이블에 삽입합니다.
+
+위의 예제는 간단한 가공 로직을 포함하고 있습니다. 실제로는 더 복잡한 비즈니스 로직과 오류 처리, 예외 상황 등을 추가적으로 구현해야 할 수 있습니다.
+
+
+
+
+
+
+Kudu를 설정하고 Spring Boot 애플리케이션에서 사용하는 기본적인 설정을 이미 제공했지만, 실제 환경에서는 추가적인 고려 사항과 설정이 필요할 수 있습니다. 아래에 Kudu 설정을 더 완벽하게 구성하고, 사용 시 주의해야 할 사항들을 추가로 설명하겠습니다.
+
+### 1. Kudu 클라이언트 설정 강화
+
+Kudu 클라이언트를 설정할 때, 클라이언트 설정을 더 세부적으로 할 수 있습니다. 예를 들어, 타임아웃 설정 등을 추가할 수 있습니다:
+
+```java
+import org.apache.kudu.client.KuduClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class KuduConfig {
+
+    @Bean
+    public KuduClient kuduClient() {
+        return new KuduClient.KuduClientBuilder("kudu-master:7051")
+                .defaultOperationTimeoutMs(30000) // 기본 타임아웃 설정
+                .defaultAdminOperationTimeoutMs(30000) // 관리 작업 타임아웃 설정
+                .defaultSocketReadTimeoutMs(10000) // 소켓 읽기 타임아웃 설정
+                .build();
+    }
+}
+```
+
+### 2. Kudu 테이블 구조 정의
+
+Kudu 테이블을 생성하고 구조를 정의하는 방법도 중요합니다. 예를 들어, 테이블을 처음 설정할 때 스키마와 분할 전략을 정의해야 합니다. 이는 애플리케이션 초기화 시에 한 번 실행할 수 있습니다.
+
+```java
+import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.Schema;
+import org.apache.kudu.Type;
+import org.apache.kudu.client.CreateTableOptions;
+import org.apache.kudu.client.KuduClient;
+import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.client.PartialRow;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class KuduTableInitializer {
+
+    @Autowired
+    private KuduClient kuduClient;
+
+    @PostConstruct
+    public void createTable() throws KuduException {
+        String tableName = "user_table";
+        if (!kuduClient.tableExists(tableName)) {
+            List<ColumnSchema> columns = new ArrayList<>();
+            columns.add(new ColumnSchema.ColumnSchemaBuilder("user_id", Type.STRING).key(true).build());
+            columns.add(new ColumnSchema.ColumnSchemaBuilder("name", Type.STRING).build());
+            columns.add(new ColumnSchema.ColumnSchemaBuilder("age", Type.INT32).build());
+
+            Schema schema = new Schema(columns);
+
+            List<String> rangeKeys = new ArrayList<>();
+            rangeKeys.add("user_id");
+
+            CreateTableOptions options = new CreateTableOptions();
+            options.setRangePartitionColumns(rangeKeys);
+
+            kuduClient.createTable(tableName, schema, options);
+        }
+    }
+}
+```
+
+### 3. 예외 처리와 리트라이 로직
+
+Kudu에 데이터를 삽입할 때 발생할 수 있는 예외를 처리하고, 실패 시 재시도를 하는 로직을 추가합니다. 이는 데이터 일관성을 보장하는 데 도움이 됩니다.
+
+```java
+import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.OperationResponse;
+import org.apache.kudu.client.SessionConfiguration;
+
+@Service
+public class KafkaKuduService {
+
+    @Autowired
+    private KuduClient kuduClient;
+
+    @KafkaListener(topics = "your_topic_name", groupId = "group_id")
+    public void consume(String message) {
+        // 메시지를 가공합니다
+        String[] parts = message.split(",");
+        String userId = parts[0];
+        String name = parts[1];
+        int age = Integer.parseInt(parts[2]);
+
+        try {
+            insertIntoKudu(userId, name, age);
+        } catch (KuduException e) {
+            e.printStackTrace();
+            // 예외 처리를 수행합니다 (재시도, 로그 기록 등)
+        }
+    }
+
+    public void insertIntoKudu(String userId, String name, int age) throws KuduException {
+        String tableName = "user_table";
+
+        KuduTable table = kuduClient.openTable(tableName);
+        KuduSession session = kuduClient.newSession();
+        session.setFlushMode(SessionConfiguration.FlushMode.AUTO_FLUSH_SYNC);
+
+        Upsert upsert = table.newUpsert();
+        PartialRow row = upsert.getRow();
+        row.addString("user_id", userId);
+        row.addString("name", name);
+        row.addInt("age", age);
+
+        OperationResponse response = session.apply(upsert);
+        if (response.hasRowError()) {
+            throw new KuduException("Failed to insert row: " + response.getRowError().toString());
+        }
+
+        session.close();
+    }
+}
+```
+
+### 4. Kafka 및 Kudu의 모니터링과 로깅
+
+운영 환경에서는 Kafka와 Kudu의 상태를 모니터링하고, 문제를 빠르게 파악할 수 있도록 로깅을 설정하는 것이 중요합니다. Spring Boot 애플리케이션에서는 `application.yml` 파일을 통해 로깅 설정을 추가할 수 있습니다:
+
+```yaml
+logging:
+  level:
+    org.apache.kafka: INFO
+    org.apache.kudu: INFO
+    com.yourcompany: DEBUG
+```
+
+이외에도 Prometheus, Grafana와 같은 모니터링 도구를 활용하여 Kafka 및 Kudu의 성능과 상태를 실시간으로 모니터링할 수 있습니다.
+
+### 요약
+
+이 가이드에서는 Spring Boot 애플리케이션에서 Kafka 토픽 데이터를 가공하여 Kudu 테이블에 삽입하는 방법을 설명했습니다. 이를 위해 Kafka와 Kudu 클라이언트 설정, 테이블 스키마 정의, 데이터 삽입 로직, 예외 처리 및 모니터링 설정 등을 다루었습니다. 실제 운영 환경에서는 이러한 설정을 기반으로 다양한 상황에 맞게 추가적인 최적화와 설정을 해야 할 수 있습니다.
