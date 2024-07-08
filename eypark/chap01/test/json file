@@ -1,0 +1,55 @@
+Person 클래스 없이 JSON 파일을 읽고 동적으로 처리하는 방법도 가능합니다. Jackson 라이브러리를 사용하여 JSON을 `Map`이나 `JsonNode` 객체로 읽을 수 있습니다. 이를 통해 JSON 구조에 관계없이 유연하게 데이터를 다룰 수 있습니다.
+
+1. **Map으로 JSON 읽기**
+   JSON 파일을 `Map<String, Object>`로 읽으면 각 키-값 쌍을 동적으로 처리할 수 있습니다.
+
+   ```java
+   import com.fasterxml.jackson.databind.ObjectMapper;
+   import java.io.File;
+   import java.io.IOException;
+   import java.util.Map;
+
+   public class JsonReaderExample {
+       public static void main(String[] args) {
+           ObjectMapper objectMapper = new ObjectMapper();
+           try {
+               // JSON 파일을 Map으로 변환
+               Map<String, Object> jsonMap = objectMapper.readValue(new File("person.json"), Map.class);
+               // Map의 내용을 출력
+               for (Map.Entry<String, Object> entry : jsonMap.entrySet()) {
+                   System.out.println(entry.getKey() + ": " + entry.getValue());
+               }
+           } catch (IOException e) {
+               e.printStackTrace();
+           }
+       }
+   }
+   ```
+
+2. **JsonNode로 JSON 읽기**
+   `JsonNode` 객체를 사용하면 JSON 구조를 트리 형태로 다룰 수 있습니다. 이를 통해 각 노드를 탐색하면서 데이터를 처리할 수 있습니다.
+
+   ```java
+   import com.fasterxml.jackson.databind.JsonNode;
+   import com.fasterxml.jackson.databind.ObjectMapper;
+   import java.io.File;
+   import java.io.IOException;
+
+   public class JsonReaderExample {
+       public static void main(String[] args) {
+           ObjectMapper objectMapper = new ObjectMapper();
+           try {
+               // JSON 파일을 JsonNode로 변환
+               JsonNode jsonNode = objectMapper.readTree(new File("person.json"));
+               // JsonNode의 내용을 출력
+               jsonNode.fields().forEachRemaining(entry -> {
+                   System.out.println(entry.getKey() + ": " + entry.getValue());
+               });
+           } catch (IOException e) {
+               e.printStackTrace();
+           }
+       }
+   }
+   ```
+
+위의 두 방법 모두 JSON 파일을 Person 클래스 없이 읽고 처리할 수 있는 방법입니다. `Map`을 사용하면 키-값 쌍으로 데이터를 다룰 수 있고, `JsonNode`를 사용하면 트리 구조로 데이터를 탐색할 수 있습니다. 필요에 따라 두 방법 중 하나를 선택하여 사용하면 됩니다.
