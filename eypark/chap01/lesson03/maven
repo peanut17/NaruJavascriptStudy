@@ -1,0 +1,257 @@
+IntelliJ IDEA에서 Maven 프로젝트를 생성하고 빌드하는 방법은 다음과 같습니다.
+
+### 1. IntelliJ에서 Maven 프로젝트 생성
+
+1. **IntelliJ IDEA 실행**:
+   - IntelliJ IDEA를 엽니다.
+
+2. **새 프로젝트 생성**:
+   - 시작 화면에서 "New Project"를 클릭합니다.
+   - 기존 프로젝트를 열었다면, `File -> New -> Project`를 선택합니다.
+
+3. **Maven 선택**:
+   - 프로젝트 타입으로 "Maven"을 선택합니다.
+   - JDK가 올바르게 설정되었는지 확인합니다.
+
+4. **프로젝트 설정**:
+   - GroupId와 ArtifactId를 입력합니다.
+   - GroupId는 일반적으로 도메인 이름의 역순(ex: `com.example`), ArtifactId는 프로젝트 이름입니다.
+   - Version은 기본값을 사용하거나 필요한 버전 번호를 입력합니다.
+   - 패키지 이름이 올바르게 설정되었는지 확인합니다.
+
+5. **프로젝트 위치 선택**:
+   - 프로젝트를 저장할 위치를 선택합니다.
+
+6. **Finish 클릭**:
+   - 모든 설정이 완료되면 "Finish"를 클릭합니다.
+
+### 2. Maven 프로젝트 빌드
+
+1. **프로젝트 구조 확인**:
+   - 생성된 프로젝트의 디렉토리 구조를 확인합니다.
+   - `pom.xml` 파일이 루트 디렉토리에 생성된 것을 확인합니다.
+
+2. **의존성 추가**:
+   - 필요한 Maven 의존성을 `pom.xml` 파일에 추가합니다.
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-web</artifactId>
+           <version>2.5.4</version>
+       </dependency>
+       <!-- 다른 의존성 추가 -->
+   </dependencies>
+   ```
+
+3. **Maven 빌드**:
+   - IntelliJ의 우측에 있는 Maven 탭을 엽니다.
+   - Lifecycle에서 `clean`과 `install`을 차례대로 실행하여 프로젝트를 빌드합니다.
+
+4. **프로젝트 실행**:
+   - 필요한 경우 `Run` 또는 `Debug` 모드를 사용하여 프로젝트를 실행합니다.
+   - `src/main/java` 디렉토리 아래에 있는 메인 클래스에서 `main` 메서드를 실행합니다.
+
+### 3. 추가 설정 및 문제 해결
+
+- **Maven 리포지토리 업데이트**:
+  - Maven 리포지토리를 업데이트하려면, `Maven` 탭에서 "Reload All Maven Projects" 아이콘을 클릭합니다.
+
+- **빌드 설정 확인**:
+  - IntelliJ의 `File -> Project Structure -> Project`에서 SDK 및 프로젝트 설정을 확인합니다.
+
+- **Maven 설정**:
+  - `File -> Settings -> Build, Execution, Deployment -> Build Tools -> Maven`에서 Maven 설정을 조정할 수 있습니다.
+
+위의 단계를 따르면 IntelliJ IDEA에서 Maven 프로젝트를 생성하고 빌드할 수 있습니다. 문제가 발생하면 에러 메시지를 참고하여 설정을 조정하거나 필요한 의존성을 추가하세요.
+
+
+
+네, 위의 단계로 Maven 프로젝트를 생성하고 빌드하면 JAR 파일을 만들 수 있습니다. 이를 위해 추가적으로 몇 가지 설정을 해주어야 합니다.
+
+### 1. `pom.xml` 파일에 빌드 설정 추가
+
+`pom.xml` 파일에 Maven 플러그인을 추가하여 JAR 파일을 생성하도록 설정해야 합니다. 가장 많이 사용하는 플러그인은 `maven-jar-plugin`과 `maven-shade-plugin`입니다.
+
+다음은 `pom.xml` 파일에 추가할 예제입니다.
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>my-app</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- JAR 파일을 만들기 위한 Maven 플러그인 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.example.Main</mainClass> <!-- 메인 클래스 경로 -->
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <!-- 의존성을 포함한 실행 가능한 JAR 파일을 만들기 위한 Maven Shade 플러그인 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.example.Main</mainClass> <!-- 메인 클래스 경로 -->
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencies>
+        <!-- 필요한 의존성을 여기에 추가 -->
+    </dependencies>
+</project>
+```
+
+### 2. JAR 파일 빌드
+
+1. **Maven 빌드**:
+   - IntelliJ에서 Maven 탭을 엽니다.
+   - Lifecycle에서 `clean`과 `package`를 차례대로 실행합니다.
+
+2. **JAR 파일 확인**:
+   - 빌드가 성공하면 `target` 디렉토리에 `my-app-1.0-SNAPSHOT.jar` 파일이 생성됩니다.
+   - Maven Shade 플러그인을 사용하면, 이 JAR 파일에 모든 의존성이 포함되어 실행 가능한 JAR 파일이 됩니다.
+
+### 3. JAR 파일 실행
+
+터미널 또는 커맨드 프롬프트에서 다음 명령어를 사용하여 JAR 파일을 실행할 수 있습니다.
+
+```sh
+java -jar target/my-app-1.0-SNAPSHOT.jar
+```
+
+위 단계를 따르면 IntelliJ IDEA에서 Maven 프로젝트를 생성하고 빌드하여 실행 가능한 JAR 파일을 만들 수 있습니다.
+
+
+
+
+오프라인 환경에서 Maven 프로젝트를 빌드하기 위해서는 필요한 모든 Maven 플러그인과 의존성들을 미리 로컬 Maven 리포지토리에 다운로드해 두어야 합니다. 그렇지 않으면, 인터넷 연결이 없어 의존성과 플러그인을 가져올 수 없기 때문에 빌드가 실패할 것입니다. 
+
+다음은 오프라인 환경에서 Maven 프로젝트를 빌드하기 위한 단계별 가이드입니다.
+
+### 1. 필요한 플러그인 및 의존성 다운로드
+
+먼저 인터넷이 되는 환경에서 필요한 모든 의존성과 플러그인을 로컬 Maven 리포지토리에 다운로드합니다.
+
+1. **필요한 모든 의존성과 플러그인을 `pom.xml`에 추가**:
+   ```xml
+   <project xmlns="http://maven.apache.org/POM/4.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+       <modelVersion>4.0.0</modelVersion>
+
+       <groupId>com.example</groupId>
+       <artifactId>my-app</artifactId>
+       <version>1.0-SNAPSHOT</version>
+
+       <properties>
+           <maven.compiler.source>1.8</maven.compiler.source>
+           <maven.compiler.target>1.8</maven.compiler.target>
+       </properties>
+
+       <build>
+           <plugins>
+               <plugin>
+                   <groupId>org.apache.maven.plugins</groupId>
+                   <artifactId>maven-jar-plugin</artifactId>
+                   <version>3.2.0</version>
+                   <configuration>
+                       <archive>
+                           <manifest>
+                               <mainClass>com.example.Main</mainClass>
+                           </manifest>
+                       </archive>
+                   </configuration>
+               </plugin>
+
+               <plugin>
+                   <groupId>org.apache.maven.plugins</groupId>
+                   <artifactId>maven-shade-plugin</artifactId>
+                   <version>3.2.4</version>
+                   <executions>
+                       <execution>
+                           <phase>package</phase>
+                           <goals>
+                               <goal>shade</goal>
+                           </goals>
+                           <configuration>
+                               <transformers>
+                                   <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                       <mainClass>com.example.Main</mainClass>
+                                   </transformer>
+                               </transformers>
+                           </configuration>
+                       </execution>
+                   </executions>
+               </plugin>
+           </plugins>
+       </build>
+
+       <dependencies>
+           <!-- 필요한 의존성을 여기에 추가 -->
+       </dependencies>
+   </project>
+   ```
+
+2. **모든 의존성과 플러그인을 로컬 리포지토리에 다운로드**:
+   ```sh
+   mvn dependency:go-offline
+   ```
+
+### 2. 오프라인 모드로 Maven 설정
+
+오프라인 환경에서는 Maven을 오프라인 모드로 실행해야 합니다.
+
+1. **Maven을 오프라인 모드로 설정**:
+   ```sh
+   mvn --offline clean package
+   ```
+
+### 3. IntelliJ에서 오프라인 모드 사용
+
+IntelliJ에서 Maven을 오프라인 모드로 사용하려면 다음과 같이 설정합니다.
+
+1. **IntelliJ에서 Maven 설정 열기**:
+   - `File -> Settings`로 이동합니다.
+   - `Build, Execution, Deployment -> Build Tools -> Maven`을 선택합니다.
+
+2. **오프라인 모드 활성화**:
+   - `Offline` 체크박스를 선택합니다.
+
+### 요약
+
+오프라인 환경에서 Maven 프로젝트를 성공적으로 빌드하기 위해서는 필요한 모든 의존성과 플러그인을 사전에 로컬 리포지토리에 다운로드해 두어야 합니다. 그런 다음 Maven을 오프라인 모드로 설정하여 빌드를 수행합니다. 이렇게 하면 인터넷 연결 없이도 JAR 파일을 생성할 수 있습니다.
