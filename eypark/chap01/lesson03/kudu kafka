@@ -1,0 +1,184 @@
+Kafka consumer에서 메시지를 처리하고 Kudu 테이블에 데이터를 삽입할 때, 메시지를 성공적으로 처리하지 못했을 경우 offset을 커밋하지 않도록 하여 메시지를 재처리할 수 있도록 하는 방법을 설명하겠습니다. Spring Kafka에서는 메시지 처리 후 커밋을 제어할 수 있는 다양한 방법을 제공합니다.
+
+주요 단계는 다음과 같습니다:
+1. KafkaListener의 AckMode를 MANUAL로 설정하여 수동 커밋을 사용.
+2. 메시지 처리 실패 시 예외를 처리하고 메시지 재처리 로직 구현.
+3. 성공적으로 처리된 메시지에 대해 offset을 커밋.
+
+### 1. KafkaListener의 AckMode 설정
+
+KafkaListenerContainerFactory에서 AckMode를 MANUAL로 설정하여 메시지를 수동으로 커밋할 수 있도록 합니다. 이렇게 하면 메시지를 처리한 후 명시적으로 커밋할 수 있습니다.
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+import org.springframework.kafka.listener.config.ContainerProperties.AckMode;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@EnableKafka
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "group_id");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
+        factory.getContainerProperties().setAckMode(AckMode.MANUAL);
+        return factory;
+    }
+}
+```
+
+### 2. 메시지 처리 및 예외 처리
+
+Kafka 메시지를 처리하고, 예외 발생 시 offset을 커밋하지 않도록 합니다. `Acknowledgment` 객체를 사용하여 메시지를 수동으로 커밋할 수 있습니다.
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kudu.client.KuduClient;
+import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.KuduSession;
+import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.client.PartialRow;
+import org.apache.kudu.client.Upsert;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KafkaKuduService {
+
+    @Autowired
+    private KuduClient kuduClient;
+
+    @KafkaListener(topics = "your_topic_name", groupId = "group_id")
+    public void consume(ConsumerRecord<String, String> record, Acknowledgment ack) {
+        String message = record.value();
+        String[] parts = message.split(",");
+        String userId = parts[0];
+        String name = parts[1];
+        int age = Integer.parseInt(parts[2]);
+
+        try {
+            insertIntoKudu(userId, name, age);
+            // 메시지를 성공적으로 처리했을 때만 커밋
+            ack.acknowledge();
+        } catch (Exception e) {
+            e.printStackTrace();
+            // 예외 발생 시 메시지를 커밋하지 않음
+        }
+    }
+
+    public void insertIntoKudu(String userId, String name, int age) throws KuduException {
+        String tableName = "user_table";
+
+        KuduTable table = kuduClient.openTable(tableName);
+        KuduSession session = kuduClient.newSession();
+        session.setFlushMode(KuduSession.FlushMode.AUTO_FLUSH_SYNC);
+
+        Upsert upsert = table.newUpsert();
+        PartialRow row = upsert.getRow();
+        row.addString("user_id", userId);
+        row.addString("name", name);
+        row.addInt("age", age);
+
+        session.apply(upsert);
+        session.close();
+    }
+}
+```
+
+### 3. Offset 재처리 전략
+
+실제 운영 환경에서는 예외 상황에 대한 다양한 재처리 전략을 고려해야 합니다. 예를 들어, 일정 시간 후 재처리를 시도하거나, 특정 조건에 따라 다른 처리를 수행하는 등의 로직을 추가할 수 있습니다. 여기서는 간단한 재시도 로직을 설명하겠습니다.
+
+```java
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kudu.client.KuduException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.stereotype.Service;
+
+@Service
+public class KafkaKuduService {
+
+    @Autowired
+    private KuduClient kuduClient;
+
+    @KafkaListener(topics = "your_topic_name", groupId = "group_id")
+    public void consume(ConsumerRecord<String, String> record, Acknowledgment ack) {
+        String message = record.value();
+        String[] parts = message.split(",");
+        String userId = parts[0];
+        String name = parts[1];
+        int age = Integer.parseInt(parts[2]);
+
+        boolean success = false;
+        int retryCount = 0;
+        int maxRetries = 3;
+
+        while (!success && retryCount < maxRetries) {
+            try {
+                insertIntoKudu(userId, name, age);
+                // 메시지를 성공적으로 처리했을 때만 커밋
+                ack.acknowledge();
+                success = true;
+            } catch (Exception e) {
+                retryCount++;
+                e.printStackTrace();
+                // 재시도 전 대기 시간
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        if (!success) {
+            // 최대 재시도 횟수를 초과한 경우 별도 로직 처리 (로그 기록, 알림 전송 등)
+            System.err.println("Failed to process message after " + maxRetries + " attempts: " + message);
+        }
+    }
+
+    public void insertIntoKudu(String userId, String name, int age) throws KuduException {
+        String tableName = "user_table";
+
+        KuduTable table = kuduClient.openTable(tableName);
+        KuduSession session = kuduClient.newSession();
+        session.setFlushMode(KuduSession.FlushMode.AUTO_FLUSH_SYNC);
+
+        Upsert upsert = table.newUpsert();
+        PartialRow row = upsert.getRow();
+        row.addString("user_id", userId);
+        row.addString("name", name);
+        row.addInt("age", age);
+
+        session.apply(upsert);
+        session.close();
+    }
+}
+```
+
+이 예제에서는 메시지 처리에 실패하면 최대 3번까지 재시도를 하며, 각 재시도 사이에 2초의 대기 시간을 둡니다. 재시도 후에도 실패하면 로그를 기록하거나 별도의 오류 처리 로직을 추가할 수 있습니다.
