@@ -1,0 +1,126 @@
+1. 쿼리 분석 및 최적화 방향 설정
+1.1. 실행 계획(EXPLAIN) 확인
+Impala에서 쿼리 실행 전에 EXPLAIN을 실행하여 실행 계획을 확인합니다.
+확인할 주요 항목:
+Join 순서와 유형: 불필요한 Broadcast Join이나 Partitioned Join이 있는지.
+파티션 프루닝: 각 테이블의 파티션이 제대로 필터링되고 있는지.
+스캔 노드: 읽는 데이터 양이 너무 많지 않은지.
+실행 계획 예시
+sql
+코드 복사
+EXPLAIN SELECT ... FROM ... WHERE ...;
+2. 최적화 기술 적용
+2.1. 필요한 컬럼만 선택 (컬럼 필터링)
+사용하지 않는 컬럼을 SELECT 목록과 조인 테이블에서 제거합니다.
+불필요한 데이터를 읽는 것을 방지하여 I/O와 메모리를 절약할 수 있습니다.
+BEFORE:
+sql
+코드 복사
+SELECT * 
+FROM fact_sales s
+JOIN dim_customer c
+ON s.customer_id = c.customer_id;
+AFTER:
+sql
+코드 복사
+SELECT s.sale_id, s.sale_amount, c.customer_name
+FROM fact_sales s
+JOIN dim_customer c
+ON s.customer_id = c.customer_id;
+2.2. 파티션 프루닝 (Partition Pruning)
+테이블이 파티션되어 있다면, WHERE 조건을 사용해 필요한 파티션만 읽도록 설정합니다.
+Range Partition된 테이블에서 특정 날짜 범위를 지정합니다.
+BEFORE:
+sql
+코드 복사
+SELECT s.sale_id, c.customer_name
+FROM fact_sales s
+JOIN dim_customer c
+ON s.customer_id = c.customer_id;
+AFTER:
+sql
+코드 복사
+SELECT s.sale_id, c.customer_name
+FROM fact_sales s
+JOIN dim_customer c
+ON s.customer_id = c.customer_id
+WHERE s.sale_date BETWEEN '2023-01-01' AND '2023-01-31';
+2.3. Join 순서 최적화
+큰 테이블끼리 조인하기 전에 필터링을 통해 데이터 양을 줄입니다.
+Impala는 기본적으로 작은 테이블을 먼저 처리하도록 최적화하지만, 명시적으로 힌트를 추가할 수도 있습니다.
+힌트를 사용한 Join 최적화
+sql
+코드 복사
+SELECT s.sale_id, o.order_id, c.customer_name
+FROM fact_sales s
+JOIN /*+ BROADCAST */ dim_customer c
+ON s.customer_id = c.customer_id
+JOIN /*+ SHUFFLE */ fact_orders o
+ON s.order_id = o.order_id
+WHERE s.sale_date BETWEEN '2023-01-01' AND '2023-01-31';
+2.4. 서브쿼리 분리
+복잡한 조인을 단일 쿼리로 처리하기보다, 중간 결과를 서브쿼리 또는 CTE(Common Table Expression)로 분리해 성능을 개선합니다.
+BEFORE (복잡한 다중 조인):
+sql
+코드 복사
+SELECT s.sale_id, o.order_id, c.customer_name, r.region_name
+FROM fact_sales s
+JOIN fact_orders o ON s.order_id = o.order_id
+JOIN dim_customer c ON s.customer_id = c.customer_id
+JOIN dim_region r ON c.region_id = r.region_id
+WHERE s.sale_date BETWEEN '2023-01-01' AND '2023-01-31';
+AFTER (CTE 사용):
+sql
+코드 복사
+WITH FilteredSales AS (
+    SELECT sale_id, customer_id, order_id
+    FROM fact_sales
+    WHERE sale_date BETWEEN '2023-01-01' AND '2023-01-31'
+),
+FilteredOrders AS (
+    SELECT order_id, order_date
+    FROM fact_orders
+    WHERE order_date BETWEEN '2023-01-01' AND '2023-01-31'
+)
+SELECT s.sale_id, o.order_id, c.customer_name, r.region_name
+FROM FilteredSales s
+JOIN FilteredOrders o ON s.order_id = o.order_id
+JOIN dim_customer c ON s.customer_id = c.customer_id
+JOIN dim_region r ON c.region_id = r.region_id;
+2.5. 집계 연산(PRE-AGGREGATION)
+조인 후 전체 데이터에 집계를 수행하는 대신, 각 테이블에서 먼저 집계하여 데이터 크기를 줄입니다.
+BEFORE (조인 후 집계):
+sql
+코드 복사
+SELECT c.customer_name, SUM(s.sale_amount)
+FROM fact_sales s
+JOIN dim_customer c ON s.customer_id = c.customer_id
+GROUP BY c.customer_name;
+AFTER (집계 후 조인):
+sql
+코드 복사
+WITH AggregatedSales AS (
+    SELECT customer_id, SUM(sale_amount) AS total_sales
+    FROM fact_sales
+    GROUP BY customer_id
+)
+SELECT c.customer_name, a.total_sales
+FROM AggregatedSales a
+JOIN dim_customer c ON a.customer_id = c.customer_id;
+2.6. 쿼리 힌트 사용
+BROADCAST 또는 SHUFFLE 힌트를 사용해 조인 전략을 명시적으로 설정합니다.
+메모리를 절약하려면 작은 테이블에는 Broadcast Join, 큰 테이블 간에는 Partitioned Join(Shuffle Join)을 사용합니다.
+3. 설정 최적화
+메모리 제한 설정:
+sql
+코드 복사
+SET MEM_LIMIT=100GB;
+병렬 스캐너 수 제한:
+sql
+코드 복사
+SET NUM_SCANNER_THREADS=4;
+요약
+컬럼 및 파티션 필터링으로 읽는 데이터 양을 줄임.
+Join 순서 최적화와 힌트로 효율적인 조인 전략 설정.
+서브쿼리와 집계 후 조인으로 중간 결과를 미리 정리.
+실행 계획(EXPLAIN)을 검토하여 병목을 파악하고 조정.
