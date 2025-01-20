@@ -1,0 +1,63 @@
+Topology exception 오류는 Apache Ignite 클러스터에서 노드 간 통신이 제대로 이루어지지 않을 때 발생합니다. 주된 원인은 네트워크 설정, 포트, IP 구성, 또는 Ignite 설정 파일 문제일 수 있습니다. 아래에서 문제를 해결하기 위한 점검 항목과 해결 방법을 제시합니다.
+
+1. IP 설정 확인 (1) config/default-config.xml의 TcpDiscoveryStaticIpFinder 확인 
+
+각 서버의 IP 주소가 정확히 설정되어 있는지 확인하세요.
+예시:
+
+<property name="discoverySpi"> <bean class="org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi"> <property name="ipFinder"> <bean class="org.apache.ignite.spi.discovery.tcp.ipfinder.tcp.TcpDiscoveryStaticIpFinder"> <property name="addresses"> <list> <value>192.168.1.101:47500..47509</value> <!-- 서버 1 IP --> <value>192.168.1.102:47500..47509</value> <!-- 서버 2 IP --> </list> </property> </bean> </property> </bean> </property> 192.168.1.101과 192.168.1.102는 서버의 실제 내부 IP여야 합니다. 로컬 네트워크 환경이 아니라면 공인 IP 또는 도메인 주소를 사용해야 합니다. (2) IP 변경 시 hostname 확인 
+
+서버의 IP가 동적으로 변경될 가능성이 있다면, 고정 IP를 설정하거나 호스트 파일에 매핑하세요.
+
+2. 방화벽 설정 (1) 포트 열기 
+
+Ignite는 다음 포트를 사용합니다. 방화벽 또는 보안 그룹에서 모든 포트가 열려 있는지 확인하세요.
+
+Ubuntu UFW 방화벽 설정:
+
+sudo ufw allow 47500:47509/tcp sudo ufw allow 47100/tcp sudo ufw allow 10800/tcp sudo ufw reload 3. Java 버전 확인 
+
+Apache Ignite는 Java 8 이상에서 실행 가능합니다. 각 서버에서 동일한 Java 버전을 사용하는지 확인하세요.
+
+java -version Ignite가 Java 11이나 Java 17과 호환되지 않는 특정 설정을 요구하는 경우가 있으니 공식 문서를 확인하세요. 4. 네트워크 통신 점검 (1) Ping 테스트 
+
+각 서버에서 서로 다른 서버의 IP로 Ping을 실행하여 통신이 가능한지 확인합니다.
+
+ping 192.168.1.102 (2) Telnet 테스트 
+
+47500 포트를 통해 연결이 가능한지 확인합니다.
+
+telnet 192.168.1.102 47500 연결이 실패하면 방화벽 또는 네트워크 문제가 원인일 수 있습니다. 5. Ignite 로그 확인 
+
+logs/ 디렉토리 아래의 로그 파일에서 자세한 오류 메시지를 확인합니다.
+
+예시:
+
+tail -f /opt/ignite/work/log/ignite.log 
+
+로그에서 다음 항목을 확인하세요:
+
+노드가 다른 노드를 검색하려고 시도했는지. IP나 포트 관련된 에러 메시지가 있는지. 6. 클러스터 모드 강제 설정 
+
+Ignite는 기본적으로 클러스터 모드에서 실행되지만, 필요한 경우 명시적으로 설정할 수 있습니다.
+
+default-config.xml에 다음을 추가:
+
+<property name="clientMode" value="false"/> 7. JVM 옵션 설정 (선택 사항) 
+
+서버가 동일한 네트워크 세그먼트에 있지 않거나 NAT를 사용하는 경우, JVM에 다음 옵션을 추가합니다.
+
+Ignite 실행 시:
+
+./bin/ignite.sh -J-Djava.net.preferIPv4Stack=true 
+
+또는 config/default-config.xml에 추가:
+
+<property name="java.net.preferIPv4Stack" value="true"/> 8. 테스트: 클러스터 연결 상태 확인 Ignite Shell로 클러스터 상태 확인 
+
+노드 간 연결이 올바르게 설정되었는지 확인합니다.
+
+cd /opt/ignite ./bin/control.sh --host 192.168.1.101 --port 47500 --action topology 
+
+위 단계들을 점검한 후에도 문제가 해결되지 않는다면, ignite.log에 기록된 구체적인 오류 메시지를 공유해 주시면 추가로 도움을 드리겠습니다.
+
