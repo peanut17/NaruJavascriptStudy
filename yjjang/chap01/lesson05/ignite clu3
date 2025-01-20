@@ -1,0 +1,52 @@
+Apache Ignite에서 control.sh 스크립트를 사용하면 클러스터 상태를 관리하고 확인할 수 있습니다. 아래는 클러스터 활성화 및 확인하는 방법에 대한 상세한 가이드입니다.
+
+1. control.sh 스크립트 위치 
+
+control.sh 스크립트는 Ignite 설치 디렉토리의 bin 폴더에 있습니다.
+
+cd /opt/ignite/bin 2. 클러스터 활성화 
+
+클러스터를 처음 시작하면 비활성화된 상태일 수 있습니다. 클러스터를 활성화하려면 아래 명령을 사용합니다.
+
+활성화 명령 ./control.sh --activate --host <NODE_IP> --port <NODE_PORT> <NODE_IP>: Ignite 노드의 IP 주소. (예: 192.168.1.101) <NODE_PORT>: Ignite 노드의 통신 포트. 기본값은 47500. 
+
+예시:
+
+./control.sh --activate --host 192.168.1.101 --port 47500 성공 메시지 
+
+클러스터가 활성화되면 다음과 같은 메시지가 출력됩니다:
+
+Cluster state changed to ACTIVE. 3. 클러스터 상태 확인 
+
+Ignite 클러스터의 상태(활성화 여부, 토폴로지 등)를 확인하려면 아래 명령을 사용합니다.
+
+상태 확인 명령 ./control.sh --action topology --host <NODE_IP> --port <NODE_PORT> 
+
+예시:
+
+./control.sh --action topology --host 192.168.1.101 --port 47500 출력 예시 Topology snapshot [ver=5, servers=2, clients=0] Node [ID=5cf42e92, ADDR=/192.168.1.101] Node [ID=7bc64a21, ADDR=/192.168.1.102] servers=2: 클러스터에 참여한 서버 노드 수. clients=0: 클러스터에 연결된 클라이언트 노드 수. 각 노드의 ID와 IP 주소가 나열됩니다. 4. 클러스터 비활성화 
+
+클러스터를 비활성화하려면 아래 명령을 사용합니다.
+
+비활성화 명령 ./control.sh --deactivate --host <NODE_IP> --port <NODE_PORT> 
+
+예시:
+
+./control.sh --deactivate --host 192.168.1.101 --port 47500 성공 메시지 Cluster state changed to INACTIVE. 5. 노드 강제 종료 또는 제거 
+
+만약 특정 노드가 장애를 일으키고 있고 클러스터에서 제거해야 한다면, 아래 명령을 사용합니다.
+
+노드 제거 명령 ./control.sh --action remove_node --node-id <NODE_ID> --host <NODE_IP> --port <NODE_PORT> <NODE_ID>는 --action topology 명령으로 확인한 노드의 ID입니다. 
+
+예시:
+
+./control.sh --action remove_node --node-id 5cf42e92 --host 192.168.1.101 --port 47500 6. JVM 설정이 필요할 경우 
+
+control.sh 실행 중 오류가 발생하거나 추가 JVM 설정이 필요한 경우, JVM_OPTS를 환경 변수로 설정합니다.
+
+예시:
+
+export JVM_OPTS="-Djava.net.preferIPv4Stack=true" ./control.sh --activate --host 192.168.1.101 --port 47500 요약 클러스터 활성화: ./control.sh --activate --host <NODE_IP> --port <NODE_PORT> 클러스터 상태 확인: ./control.sh --action topology --host <NODE_IP> --port <NODE_PORT> 클러스터 비활성화: ./control.sh --deactivate --host <NODE_IP> --port <NODE_PORT> 노드 제거: ./control.sh --action remove_node --node-id <NODE_ID> --host <NODE_IP> --port <NODE_PORT> 
+
+위 명령을 통해 클러스터를 관리하고 상태를 확인할 수 있습니다. 추가적인 문제가 있다면 로그나 에러 메시지를 공유해 주시면 더 도와드리겠습니다.
+
