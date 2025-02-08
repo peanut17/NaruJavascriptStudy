@@ -1,0 +1,195 @@
+ClickHouse에서 파티셔닝, 인덱스, ORDER BY 최적화 방법을 자세히 설명해줄게! 🚀
+이 세 가지를 잘 활용하면 대량 데이터에서도 빠른 SELECT 쿼리 성능을 유지할 수 있어.
+
+
+---
+
+🔹 1. ClickHouse의 테이블 설계 기본 개념
+
+ClickHouse는 일반적인 RDBMS(MySQL, PostgreSQL)와 다르게 인덱스를 최소화하고 컬럼 단위 저장을 사용해 최적화된 성능을 제공해.
+즉, 적절한 파티셔닝과 ORDER BY를 설정하는 것이 핵심이야.
+
+✅ 테이블 설계의 핵심 요소
+
+1️⃣ ORDER BY → 데이터를 정렬된 상태로 저장해 조회 속도를 향상
+2️⃣ PARTITION BY → 데이터를 논리적 단위로 나누어 불필요한 데이터 스캔 방지
+3️⃣ PRIMARY INDEX → ClickHouse의 ORDER BY 컬럼이 자동으로 프라이머리 인덱스 역할 수행
+4️⃣ SECONDARY INDEX (SKIP INDEX) → 특정 조건으로 빠르게 필터링할 때 사용
+
+
+---
+
+🔹 2. ORDER BY 설정 방법 (테이블 생성 시)
+
+✅ ORDER BY란?
+
+ClickHouse에서 ORDER BY는 단순 정렬이 아니라 데이터를 저장할 때 미리 정렬된 상태로 유지하는 역할을 해.
+즉, 테이블을 생성할 때 어떤 컬럼으로 정렬할지 미리 지정하면, ORDER BY 실행 시 매우 빠른 조회가 가능해.
+
+
+---
+
+✅ 기본 테이블 생성 예제
+
+CREATE TABLE my_table
+(
+    id UInt64,
+    name String,
+    event_time DateTime
+) ENGINE = MergeTree()
+ORDER BY event_time;
+
+🔹 이렇게 하면 event_time 기준으로 데이터가 정렬된 상태로 저장됨!
+🔹 이후 ORDER BY event_time을 수행하면 미리 정렬된 상태라 매우 빠르게 조회 가능 🚀
+
+
+---
+
+✅ ORDER BY를 여러 개 설정하기 (복합 정렬)
+
+만약 여러 개의 컬럼을 기준으로 정렬하고 싶다면, ORDER BY 안에 여러 컬럼을 추가하면 돼.
+
+CREATE TABLE my_table
+(
+    id UInt64,
+    name String,
+    event_time DateTime,
+    category String
+) ENGINE = MergeTree()
+ORDER BY (category, event_time);
+
+🔹 이렇게 하면 category → event_time 순서로 정렬됨.
+🔹 즉, ORDER BY category, event_time 쿼리를 실행할 때 더 빠른 속도를 낼 수 있어! 🚀
+
+
+---
+
+🔹 3. 파티셔닝 (PARTITION BY)
+
+ClickHouse는 기본적으로 데이터를 ORDER BY에 맞게 정렬하지만, 데이터가 너무 많으면 쿼리 속도가 느려질 수 있어.
+이를 해결하는 방법이 PARTITION BY야.
+
+✅ PARTITION BY란?
+
+데이터를 여러 개의 논리적 단위(파티션)로 분할하여 저장
+
+쿼리 실행 시 필요한 파티션만 스캔하므로 속도가 빨라짐 🚀
+
+
+
+---
+
+✅ PARTITION BY 사용 예제
+
+CREATE TABLE my_table
+(
+    id UInt64,
+    name String,
+    event_time DateTime,
+    category String
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(event_time)  -- 월별 파티션
+ORDER BY (category, event_time);
+
+🔹 여기서 PARTITION BY toYYYYMM(event_time)을 사용하면, 각 월별로 데이터를 분리해서 저장해.
+🔹 즉, 한 달 단위로 데이터가 저장되므로, 특정 월의 데이터를 조회할 때 속도가 훨씬 빨라짐! 🚀
+
+
+---
+
+✅ 파티셔닝의 장점
+
+
+---
+
+🔹 4. 인덱스 설정 (PRIMARY INDEX & SKIP INDEX)
+
+ClickHouse는 MySQL 같은 B-Tree 인덱스가 없지만, 특정 컬럼에서 빠른 조회를 위해 인덱스를 추가할 수 있어.
+
+✅ PRIMARY INDEX
+
+ClickHouse의 ORDER BY 컬럼은 자동으로 PRIMARY INDEX가 돼.
+즉, ORDER BY 컬럼을 잘 설계하면 추가적인 인덱스가 필요 없음! 🚀
+
+CREATE TABLE my_table
+(
+    id UInt64,
+    name String,
+    event_time DateTime
+) ENGINE = MergeTree()
+ORDER BY (event_time, id);  -- event_time을 기준으로 정렬 (기본 인덱스 역할)
+
+🔹 event_time이 PRIMARY INDEX 역할을 하므로 시간 필터링이 빠름
+
+
+---
+
+✅ SKIP INDEX (Secondary Index)
+
+특정 컬럼에서 WHERE 조건 필터링을 빠르게 하고 싶다면 **SKIP INDEX(세컨더리 인덱스)**를 사용할 수 있어.
+
+SKIP INDEX는 특정 조건에서 필요 없는 데이터 블록을 건너뛸 수 있도록 도와줌.
+
+
+CREATE TABLE my_table
+(
+    id UInt64,
+    name String,
+    event_time DateTime,
+    category String,
+    INDEX idx_category category TYPE set(0) GRANULARITY 1  -- category 컬럼에 SKIP INDEX 추가
+) ENGINE = MergeTree()
+ORDER BY event_time;
+
+🔹 INDEX idx_category category TYPE set(0) GRANULARITY 1
+
+category 컬럼에 대해 SKIP INDEX를 설정
+
+WHERE category = 'sports' 같은 필터링이 훨씬 빨라짐 🚀
+
+
+
+---
+
+🔹 5. 최적화된 SELECT 쿼리 실행
+
+이제 최적화된 테이블을 만들었으니, 빠른 SELECT 쿼리를 실행할 수 있어!
+
+✅ 기본 SELECT + ORDER BY
+
+SELECT id, name, event_time 
+FROM my_table 
+ORDER BY event_time DESC 
+LIMIT 1000;
+
+✅ 특정 파티션 데이터만 조회
+
+SELECT id, name, event_time 
+FROM my_table 
+WHERE toYYYYMM(event_time) = 202401  -- 2024년 1월 데이터만 조회
+ORDER BY event_time DESC 
+LIMIT 1000;
+
+➡ 파티셔닝 덕분에 2024년 1월 데이터만 빠르게 조회 가능 🚀
+
+✅ SKIP INDEX 활용 (빠른 WHERE 필터링)
+
+SELECT id, name, event_time 
+FROM my_table 
+WHERE category = 'sports' 
+ORDER BY event_time DESC 
+LIMIT 1000;
+
+➡ SKIP INDEX 덕분에 category = 'sports' 조건이 빠르게 동작함! 🔥
+
+
+---
+
+🔹 6. 요약
+
+
+---
+
+이제 ClickHouse에서 빠른 ORDER BY + 인덱스 + 파티셔닝 최적화를 적용할 수 있어! 🚀
+더 궁금한 점 있으면 질문해 줘! 😊
+
