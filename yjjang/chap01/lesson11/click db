@@ -1,0 +1,122 @@
+DBeaver를 사용하여 ClickHouse를 연동하는 방법을 단계별로 자세히 설명드리겠습니다. DBeaver는 다양한 데이터베이스를 지원하는 강력한 GUI 도구로, ClickHouse와의 연동도 간단히 할 수 있습니다.
+
+1. DBeaver 설치
+
+DBeaver가 아직 설치되지 않았다면 먼저 설치해야 합니다.
+
+1.1. DBeaver 설치
+
+Ubuntu에서 DBeaver를 설치하려면 아래 명령어를 실행합니다:
+
+sudo apt update
+sudo apt install dbeaver
+
+또는 DBeaver 공식 웹사이트에서 설치 파일을 다운로드하여 설치할 수도 있습니다.
+
+
+2. ClickHouse JDBC 드라이버 다운로드
+
+ClickHouse와 연결하려면 JDBC 드라이버가 필요합니다. DBeaver는 JDBC를 사용하여 ClickHouse에 연결할 수 있습니다.
+
+2.1. JDBC 드라이버 설정
+
+1. DBeaver 실행 후, 좌측 상단의 Database 메뉴에서 Driver Manager를 선택합니다.
+
+
+2. Driver Manager에서 New 버튼을 클릭합니다.
+
+
+3. 드라이버 이름을 ClickHouse로 지정하고, Driver Libraries 탭에서 Add File을 클릭하여 clickhouse-jdbc 드라이버 JAR 파일을 추가합니다.
+
+JAR 파일은 ClickHouse JDBC 드라이버 GitHub 페이지에서 다운로드할 수 있습니다. 최신 버전의 clickhouse-jdbc JAR 파일을 다운로드하여 추가하세요.
+
+
+예시로 clickhouse-jdbc-0.3.2.jar 파일을 다운로드한 후, Driver Manager에서 이 파일을 추가합니다.
+
+
+
+3. ClickHouse 연결 설정
+
+3.1. 새로운 데이터베이스 연결 생성
+
+1. DBeaver의 메인 화면에서 Database 메뉴 또는 좌측의 Database Navigator에서 New Database Connection을 클릭합니다.
+
+
+2. 데이터베이스 목록에서 ClickHouse를 선택합니다. 목록에 없다면, 위에서 만든 드라이버를 선택해야 할 수 있습니다.
+
+
+
+3.2. 연결 세부 정보 입력
+
+ClickHouse를 선택한 후, 다음과 같은 정보를 입력해야 합니다.
+
+Host: ClickHouse 서버의 호스트 이름 또는 IP 주소 (예: localhost 또는 서버 IP 주소)
+
+Port: 기본 포트는 8123입니다.
+
+Database: 사용할 데이터베이스 이름 (예: default)
+
+User: ClickHouse의 사용자 이름 (기본값은 default)
+
+Password: 비밀번호 (기본값은 빈 문자열, 설정된 비밀번호가 있으면 입력)
+
+
+예시:
+
+Host: localhost
+
+Port: 8123
+
+Database: default
+
+User: default
+
+Password: 비밀번호 (비어있으면 그대로 두세요)
+
+
+4. 연결 테스트
+
+연결 정보를 입력한 후, Test Connection 버튼을 클릭하여 연결이 정상적으로 이루어지는지 확인합니다.
+
+만약 연결이 성공하면 Connection Test Passed라는 메시지가 나타납니다.
+
+연결이 실패하면 오류 메시지를 확인하고 필요한 설정을 조정하세요.
+
+
+5. 연결 완료
+
+연결이 성공하면 Finish를 클릭하여 데이터베이스 연결을 저장합니다. 이제 DBeaver의 Database Navigator에서 ClickHouse를 선택하고, SQL Editor에서 SQL 쿼리를 실행할 수 있습니다.
+
+6. SQL 쿼리 실행
+
+연결된 ClickHouse 데이터베이스에서 SQL 쿼리를 실행하려면:
+
+1. SQL Editor를 열고, 원하는 SQL 쿼리를 입력합니다. 예를 들어:
+
+SELECT * FROM users LIMIT 10;
+
+
+2. Execute 버튼을 눌러 쿼리를 실행합니다.
+
+
+
+결과가 하단의 Result 탭에 표시됩니다. SQL 쿼리 실행 결과를 쉽게 확인할 수 있습니다.
+
+7. 기타 설정
+
+DBeaver에서는 ClickHouse와의 연결을 더욱 세부적으로 설정할 수 있는 여러 기능을 제공합니다.
+
+Connection Settings에서 Auto Commit, Timezone 설정 등을 조정할 수 있습니다.
+
+Query Execution에서 Batch execution, Statement timeout 등을 설정할 수 있습니다.
+
+
+8. 문제 해결
+
+연결 실패 시: 드라이버가 잘못 설정되었거나, ClickHouse 서버가 실행되지 않았을 수 있습니다. 서버 로그를 확인하고, 드라이버 버전 및 설정을 재검토해 보세요.
+
+쿼리 성능 저하: 쿼리 성능이 좋지 않으면 Explain 기능을 사용하여 쿼리 실행 계획을 분석할 수 있습니다.
+
+
+이렇게 DBeaver에서 ClickHouse를 연동하여 SQL 쿼리를 실행하고 결과를 확인할 수 있습니다.
+
