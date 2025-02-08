@@ -1,0 +1,128 @@
+네, 폐쇄망(인터넷이 없는 환경)에서도 ClickHouse 설치 가능 합니다! 🚀
+아래 방법으로 ClickHouse를 오프라인 설치할 수 있어요.
+
+
+---
+
+🔹 1. ClickHouse 패키지 다운로드 (인터넷이 되는 환경)
+
+폐쇄망에서는 APT 저장소에 접근할 수 없으므로, ClickHouse 패키지를 미리 다운로드해야 해요.
+인터넷이 되는 PC에서 다음 작업을 진행하세요.
+
+1️⃣ ClickHouse 최신 패키지 다운로드
+
+mkdir clickhouse_offline && cd clickhouse_offline
+
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-client_23.8.8.18_amd64.deb
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-server_23.8.8.18_amd64.deb
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-common-static_23.8.8.18_amd64.deb
+
+💡 버전이 다를 수 있으니 최신 버전 확인 후 다운로드하세요!
+👉 최신 버전 확인: ClickHouse 공식 패키지 사이트
+
+
+---
+
+2️⃣ 패키지 파일을 폐쇄망 서버로 전송
+
+폐쇄망 환경의 서버로 scp 또는 USB 등을 이용해서 패키지를 복사하세요.
+
+scp clickhouse-*.deb user@closed-network-server:/tmp/clickhouse_offline/
+
+🔹 user@closed-network-server → 폐쇄망 서버의 사용자 계정 & IP 입력
+
+
+---
+
+🔹 2. 폐쇄망 환경에서 ClickHouse 설치
+
+폐쇄망 환경의 서버에서 아래 명령어를 실행하세요.
+
+1️⃣ 패키지 설치
+
+cd /tmp/clickhouse_offline
+sudo dpkg -i clickhouse-common-static_23.8.8.18_amd64.deb
+sudo dpkg -i clickhouse-client_23.8.8.18_amd64.deb
+sudo dpkg -i clickhouse-server_23.8.8.18_amd64.deb
+
+🔹 dpkg -i 명령어를 사용하면 인터넷 없이 설치 가능!
+
+
+---
+
+2️⃣ ClickHouse 실행 및 확인
+
+sudo systemctl start clickhouse-server
+sudo systemctl status clickhouse-server
+
+🔹 Active: active (running)이 표시되면 정상적으로 실행됨.
+
+
+---
+
+3️⃣ ClickHouse 클라이언트 접속 테스트
+
+clickhouse-client
+
+🔹 정상적으로 실행되면 아래와 같은 프롬프트가 나와야 함.
+
+ClickHouse client version 23.8.8.18.
+Connecting to localhost:9000 as user default.
+Connected to ClickHouse server version 23.8.8.18.
+
+
+---
+
+🔹 3. 폐쇄망 환경에서 ClickHouse 설정 변경 (선택)
+
+1️⃣ 설정 파일 경로
+
+ClickHouse 설정은 /etc/clickhouse-server/config.xml 파일에 있음.
+필요한 경우 nano 또는 vim으로 편집 가능.
+
+sudo nano /etc/clickhouse-server/config.xml
+
+2️⃣ 원격 접속 허용 (필요 시)
+
+기본적으로 ClickHouse는 localhost에서만 접속 가능.
+다른 서버에서 접속하려면 <listen_host> 설정을 변경해야 함.
+
+<listen_host>0.0.0.0</listen_host>
+
+변경 후 ClickHouse 재시작
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+💡 요약: 폐쇄망에서 ClickHouse 설치하는 방법
+
+1️⃣ 인터넷이 되는 환경에서 패키지 다운로드
+
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-server_23.8.8.18_amd64.deb
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-client_23.8.8.18_amd64.deb
+wget https://packages.clickhouse.com/deb/pool/main/c/clickhouse/clickhouse-common-static_23.8.8.18_amd64.deb
+
+2️⃣ 파일을 폐쇄망 서버로 전송
+
+scp clickhouse-*.deb user@closed-network-server:/tmp/clickhouse_offline/
+
+3️⃣ 폐쇄망 서버에서 설치
+
+cd /tmp/clickhouse_offline
+sudo dpkg -i clickhouse-common-static_23.8.8.18_amd64.deb
+sudo dpkg -i clickhouse-client_23.8.8.18_amd64.deb
+sudo dpkg -i clickhouse-server_23.8.8.18_amd64.deb
+
+4️⃣ ClickHouse 실행 & 테스트
+
+sudo systemctl start clickhouse-server
+clickhouse-client
+
+
+---
+
+이 방법대로 하면 인터넷이 없는 환경에서도 ClickHouse를 설치하고 사용할 수 있어요! 🚀
+혹시 설치 과정에서 문제가 생기면 알려줘요. 😊
+
