@@ -9,6 +9,13 @@ ClickHouse는 OLAP(Online Analytical Processing) DB이기 때문에, 일반적�
 기본적으로 ClickHouse에서는 JOIN을 최소화하고, 대용량 데이터를 처리할 때 JOIN을 최적화해야 함.
 
 ✅ ClickHouse의 JOIN 방식
+JOIN 유형	설명	사용 사례
+ANY INNER JOIN	가장 일반적인 INNER JOIN (첫 번째 일치 항목만 가져옴)	중복이 적은 경우
+ALL INNER JOIN	일반적인 RDBMS의 INNER JOIN과 동일 (모든 일치 항목을 가져옴)	중복이 많을 때
+LEFT JOIN	왼쪽 테이블의 모든 행을 유지하고 오른쪽 테이블과 매칭	보조 데이터가 있는 경우
+RIGHT JOIN	오른쪽 테이블의 모든 행을 유지	특수한 경우
+CROSS JOIN	모든 조합을 생성 (매우 위험, 피할 것!)	거의 사용 X
+ASOF JOIN	시간 기반 근사 JOIN	타임스탬프 기반 데이터
 
 👉 ClickHouse에서는 ANY INNER JOIN이 가장 빠름 (필요한 경우만 JOIN 수행)
 👉 기본적으로 ALL INNER JOIN보다 ANY INNER JOIN을 추천
@@ -166,6 +173,13 @@ SET distributed_product_mode = 'local';  -- 분산 테이블에서 JOIN 최적�
 ---
 
 🔹 6. 최적화 요약
+최적화 방법	설명	예제
+ANY INNER JOIN 사용	첫 번째 일치 항목만 가져와서 성능 향상	ANY INNER JOIN
+PREWHERE 사용	먼저 필터링을 수행하여 불필요한 스캔 방지	PREWHERE event_time >= now() - INTERVAL 30 DAY
+LIMIT 사용	불필요한 데이터 조회 방지	LIMIT 10000
+Join 엔진 사용	작은 테이블을 메모리에 캐싱하여 JOIN 속도 향상	ENGINE = Join(ANY, LEFT, id)
+Dictionary 엔진 사용	변경이 적은 데이터는 Dictionary 엔진 활용	CREATE DICTIONARY
+메모리 설정 최적화	JOIN 처리 시 메모리 한도를 늘려 성능 향상	SET max_memory_usage = 10GB;
 
 
 ---
