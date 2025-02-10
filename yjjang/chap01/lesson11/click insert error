@@ -1,0 +1,226 @@
+ClickHouse를 DBeaver와 연동하여 INSERT 실행 시 1002 Error가 발생하는 경우, 일반적으로 "default database not specified" 또는 "syntax error" 와 관련이 있을 가능성이 큽니다.
+
+가능한 원인 및 해결 방법
+
+1. 데이터베이스를 명시적으로 지정하지 않음
+
+DBeaver에서 INSERT 실행 시, 현재 선택된 데이터베이스가 없거나 잘못된 경우 오류가 발생할 수 있습니다.
+
+해결 방법:
+
+USE <database_name>; 를 먼저 실행한 후 INSERT 실행
+
+USE my_database;
+INSERT INTO my_table (col1, col2) VALUES (1, 'test');
+
+또는 데이터베이스명을 명시적으로 사용:
+
+INSERT INTO my_database.my_table (col1, col2) VALUES (1, 'test');
+
+
+
+---
+
+2. ClickHouse의 INSERT 문법 오류
+
+ClickHouse는 일반적인 INSERT INTO ... VALUES (...) 문법과 다르게, VALUES 없이 FORMAT을 사용해야 하는 경우가 많습니다.
+
+해결 방법:
+
+1. 기본적인 INSERT 문을 사용할 경우:
+
+INSERT INTO my_table (col1, col2) VALUES (1, 'test');
+
+위 방식이 ClickHouse에서 지원되는 테이블 엔진(MergeTree, Log 등)과 호환되지 않을 수도 있음.
+
+
+2. FORMAT을 사용하여 데이터 삽입:
+
+INSERT INTO my_table FORMAT Values
+(1, 'test'),
+(2, 'example');
+
+
+
+
+---
+
+3. DBeaver의 JDBC 드라이버 설정 문제
+
+DBeaver가 사용하는 JDBC 드라이버가 올바르게 설정되지 않았거나 버전이 맞지 않는 경우도 문제를 일으킬 수 있습니다.
+
+해결 방법:
+
+DBeaver에서 ClickHouse 연결을 선택 → Driver settings 확인
+
+최신 ClickHouse JDBC 드라이버 사용 (clickhouse-jdbc)
+
+JDBC URL을 확인 (?use_server_time_zone=true 추가 가능)
+
+jdbc:clickhouse://your_clickhouse_server:8123/default?use_server_time_zone=true
+
+
+
+---
+
+4. 테이블 엔진 확인 (특정 엔진에서는 INSERT 제한됨)
+
+ClickHouse에서는 특정 엔진(MergeTree 이외의 일부 엔진)에서 INSERT가 제한될 수 있습니다.
+
+해결 방법:
+
+테이블 엔진 확인:
+
+SHOW CREATE TABLE my_table;
+
+만약 엔진이 MergeTree가 아니라면, 적절한 엔진을 사용해야 함:
+
+CREATE TABLE my_table (
+    col1 Int32,
+    col2 String
+) ENGINE = MergeTree()
+ORDER BY col1;
+
+
+
+---
+
+결론
+
+1. 데이터베이스를 명확하게 지정 (USE my_database; 또는 INSERT INTO my_database.my_table ...)
+
+
+2. ClickHouse 문법 (VALUES 또는 FORMAT 확인)
+
+
+3. 최신 JDBC 드라이버 사용
+
+
+4. 테이블 엔진이 MergeTree인지 확인
+
+
+
+위 방법을 확인하면 1002 Error를 해결할 수 있을 가능성이 큽니다.
+만약 추가적인 오류 메시지가 있다면 알려주면 더 정확한 해결책을 찾을 수 있습니다!
+
+
+
+   INSERT는 정상적으로 실행되지만 DBeaver에서 1002 에러가 뜨는 경우, DBeaver와 ClickHouse 간의 JDBC 드라이버 또는 데이터 반환 방식 문제일 가능성이 큽니다.
+
+가능한 원인 및 해결 방법
+
+1. ClickHouse JDBC 드라이버 버전 문제
+
+DBeaver가 기본적으로 사용하는 JDBC 드라이버가 ClickHouse와 100% 호환되지 않을 수 있음.
+
+특히 최신 ClickHouse 버전에서는 기존 드라이버와 호환성 문제가 발생할 수 있음.
+
+
+✅ 해결 방법:
+
+1. 최신 ClickHouse JDBC 드라이버 설치
+
+DBeaver → 데이터베이스 → 드라이버 관리자 (Driver Manager)
+
+ClickHouse 드라이버 선택 후 드라이버 파일 업그레이드 (Download/Update)
+
+
+
+2. 수동 설치 (최신 버전 다운로드)
+
+최신 ClickHouse JDBC 드라이버를 다운로드:
+https://github.com/ClickHouse/clickhouse-jdbc
+
+DBeaver에서 기존 드라이버 제거 후 새로 추가
+
+
+
+
+
+---
+
+2. DBeaver의 Query Execution 방식 문제
+
+DBeaver는 기본적으로 실행 후 결과를 반환하려고 시도하는데,
+ClickHouse에서는 INSERT 실행 후 별도의 결과를 반환하지 않음 → 이 과정에서 에러가 발생할 수 있음.
+
+✅ 해결 방법:
+
+1. Query 실행 옵션 변경
+
+DBeaver → 데이터베이스 → 고급 설정 (Advanced settings)
+
+SQL Execution 섹션에서 "Retrieve Generated Keys" (생성된 키 가져오기) 옵션 해제
+
+
+
+2. 다른 실행 방법 사용
+
+INSERT INTO ... VALUES (...) 실행 후 Ctrl + Enter가 아닌
+Alt + X (Script Execution)으로 실행
+
+
+
+
+
+---
+
+3. ClickHouse의 INSERT 반환 값 문제
+
+ClickHouse는 INSERT 실행 후 기본적으로 결과를 반환하지 않음.
+그러나 일부 ClickHouse 버전에서는 내부적으로 "No Data" 를 반환하며 DBeaver에서 이를 에러로 인식할 수 있음.
+
+✅ 해결 방법:
+
+INSERT 후 SELECT 문 실행하여 명확한 결과 반환:
+
+INSERT INTO my_table (col1, col2) VALUES (1, 'test');
+SELECT 'INSERT SUCCESS' AS status;
+
+또는 SET send_logs_level = 'fatal'; 설정 후 실행
+
+
+
+---
+
+4. DBeaver의 JDBC URL 옵션 추가
+
+ClickHouse와 DBeaver의 연결 옵션을 조정하면 해결될 수 있음.
+
+✅ 해결 방법:
+DBeaver에서 ClickHouse 연결 설정 → 고급 설정 (Driver Properties)에서 다음을 추가:
+
+JDBC URL 수정 (기존 설정에서 다음 옵션 추가)
+
+jdbc:clickhouse://your_clickhouse_server:8123/default?send_logs_level=fatal
+
+또는 Driver Properties에서 직접 설정:
+
+send_logs_level = fatal
+
+use_server_time_zone = true
+
+
+
+
+---
+
+결론
+
+1. JDBC 드라이버 업데이트 (최신 버전 사용)
+
+
+2. DBeaver의 Query Execution 설정 변경 (Retrieve Generated Keys 해제)
+
+
+3. ClickHouse의 결과 반환 방식 문제 해결 (SELECT 추가)
+
+
+4. JDBC URL 옵션 추가 (send_logs_level=fatal)
+
+
+
+이 방법들을 적용하면 INSERT는 정상 동작하면서도 DBeaver에서 에러 없이 실행될 가능성이 큽니다.
+혹시 적용해도 문제가 해결되지 않으면 추가적인 에러 메시지를 알려줘!
+
+                     
