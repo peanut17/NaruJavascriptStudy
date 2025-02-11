@@ -1,0 +1,131 @@
+ClickHouse에서 CSV 파일을 서버에서 직접 Import하는 방법을 설명할게.
+
+
+---
+
+1. CSV 파일 준비
+
+ClickHouse 서버에서 CSV 파일이 있어야 해.
+예를 들어 /var/lib/clickhouse/user_files/data.csv에 다음과 같은 CSV 파일이 있다고 가정하자.
+
+1,John,25,New York
+2,Jane,30,San Francisco
+3,David,28,Los Angeles
+
+
+---
+
+2. ClickHouse 테이블 생성
+
+CSV 데이터를 저장할 테이블을 먼저 만들어야 해.
+
+CREATE TABLE users (
+    id UInt32,
+    name String,
+    age UInt8,
+    city String
+) ENGINE = MergeTree()
+ORDER BY id;
+
+
+---
+
+3. 서버에서 CSV 파일 Import
+
+ClickHouse에서 INSERT INTO ... FORMAT CSV를 사용해서 데이터를 불러올 수 있어.
+
+INSERT INTO users FORMAT CSV
+FROM '/var/lib/clickhouse/user_files/data.csv';
+
+만약 CSV 파일에 헤더(컬럼명)가 포함되어 있다면, CSVWithNames 포맷을 사용하면 돼.
+
+INSERT INTO users FORMAT CSVWithNames
+FROM '/var/lib/clickhouse/user_files/data.csv';
+
+
+---
+
+4. 파일 권한 문제 해결
+
+ClickHouse는 보안상 기본적으로 /var/lib/clickhouse/user_files/ 디렉터리에서만 파일을 읽을 수 있어.
+만약 다른 위치의 파일을 가져오려면 설정을 변경해야 해.
+
+1. 설정 파일 수정
+
+sudo nano /etc/clickhouse-server/config.xml
+
+
+2. <user_files_path> 경로 확인 또는 수정
+
+<user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+
+
+3. ClickHouse 재시작
+
+sudo systemctl restart clickhouse-server
+
+
+
+만약 특정 디렉터리에서 읽을 권한이 없다고 나오면, 아래처럼 권한을 부여하면 돼.
+
+sudo chmod -R 755 /var/lib/clickhouse/user_files/
+sudo chown -R clickhouse:clickhouse /var/lib/clickhouse/user_files/
+
+
+---
+
+5. clickhouse-client 명령어로 Import
+
+터미널에서 clickhouse-client를 사용해서 CSV 파일을 Import할 수도 있어.
+
+clickhouse-client --query="INSERT INTO users FORMAT CSV" < /var/lib/clickhouse/user_files/data.csv
+
+헤더가 있는 CSV 파일을 Import하는 경우:
+
+clickhouse-client --query="INSERT INTO users FORMAT CSVWithNames" < /var/lib/clickhouse/user_files/data.csv
+
+
+---
+
+6. Import 확인
+
+CSV 파일이 정상적으로 Import되었는지 확인하려면 아래 쿼리를 실행하면 돼.
+
+SELECT * FROM users;
+
+
+---
+
+7. 대용량 CSV 파일 Import 최적화
+
+만약 대용량 CSV 파일을 Import할 경우, **parallel processing (병렬 처리)**를 활용하면 속도를 더 높일 수 있어.
+
+INSERT INTO users FORMAT CSV
+SETTINGS input_format_parallel_parsing=1;
+
+또는 clickhouse-local을 사용하면 더 빠르게 Import할 수도 있어.
+
+clickhouse-local --structure "id UInt32, name String, age UInt8, city String" \
+--input-format CSV --output-format Native \
+--query "INSERT INTO users FORMAT CSV" < /path/to/data.csv
+
+
+---
+
+결론
+
+1. CSV 파일을 /var/lib/clickhouse/user_files/에 저장
+
+
+2. 테이블을 생성
+
+
+3. INSERT INTO ... FORMAT CSV로 Import
+
+
+4. 필요하면 clickhouse-client나 clickhouse-local을 사용해서 대량 데이터 Import
+
+
+
+이 방법대로 하면 빠르게 CSV 파일을 ClickHouse로 Import할 수 있어!
+
