@@ -1,0 +1,85 @@
+ClickHouse의 설정은 SQL에서 SET으로 설정하는 방법과 설정 파일 (config.xml 또는 users.xml)을 수정하는 방법 두 가지가 있어.
+
+SET 문: 특정 세션(쿼리)에만 적용됨. 서버를 재시작하면 초기화됨.
+
+설정 파일 (config.xml, users.xml): 영구적으로 적용됨. 서버 재시작 필요.
+
+
+
+---
+
+1. 설정 파일을 수정하는 방법
+
+ClickHouse의 주요 설정 파일은 두 가지야:
+
+config.xml: 전체 서버에 영향을 주는 설정
+
+users.xml 또는 users.d/*.xml: 특정 사용자별 설정
+
+
+설정 파일은 기본적으로 /etc/clickhouse-server/ 경로에 있음.
+
+
+---
+
+1.1 config.xml에서 설정 (전역 설정)
+
+ClickHouse 전체에 적용되는 설정은 /etc/clickhouse-server/config.xml에 추가하면 돼.
+
+예를 들어, 메모리 관련 설정을 변경하려면:
+
+<yandex>
+    <max_memory_usage>50000000000</max_memory_usage>  <!-- 50GB -->
+    <max_memory_usage_for_all_queries>200000000000</max_memory_usage_for_all_queries>  <!-- 200GB -->
+    <memory_overcommit_ratio>0.5</memory_overcommit_ratio>
+</yandex>
+
+> 변경 후 sudo systemctl restart clickhouse-server로 재시작해야 적용됨.
+
+
+
+
+---
+
+1.2 users.xml에서 설정 (사용자별 설정)
+
+특정 사용자별 설정은 /etc/clickhouse-server/users.xml 또는 /etc/clickhouse-server/users.d/*.xml에서 변경할 수 있어.
+
+예를 들어, default 사용자에게 높은 리소스 제한을 적용하려면:
+
+<yandex>
+    <users>
+        <default>
+            <profile>default</profile>
+            <max_memory_usage>50000000000</max_memory_usage>  <!-- 50GB -->
+            <max_threads>32</max_threads>
+            <max_block_size>100000</max_block_size>
+            <join_algorithm>auto</join_algorithm>
+            <optimize_read_in_order>1</optimize_read_in_order>
+        </default>
+    </users>
+</yandex>
+
+> 변경 후 sudo systemctl restart clickhouse-server 필요.
+
+
+
+
+---
+
+2. 설정을 적용하는 방법 정리
+
+
+---
+
+3. 추천하는 설정 방법
+
+개발 환경이나 특정 쿼리에 대해 일시적으로 설정을 변경하려면 SET 문 사용
+
+성능 최적화를 위해 서버 전체에 적용하려면 config.xml 수정
+
+특정 사용자에게만 적용하려면 users.xml 수정
+
+
+필요한 설정을 config.xml이나 users.xml에 추가하고, 서버를 재시작하면 ClickHouse가 더 빠르게 동작할 거야!
+
