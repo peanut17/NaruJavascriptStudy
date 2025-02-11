@@ -1,0 +1,103 @@
+CSV를 ClickHouse에 IMPORT할 때 패스워드 에러(Authentication failed 또는 Password incorrect 오류) 해결 방법을 정리해 줄게.
+
+
+---
+
+1. ClickHouse 계정 및 비밀번호 확인
+
+먼저, ClickHouse에 로그인할 수 있는지 확인해 봐.
+
+clickhouse-client -u default --password
+
+default 계정은 ClickHouse 설치 시 기본 계정이야.
+
+만약 default 계정이 비밀번호 없이 설정되어 있다면, 그냥 --password 없이 실행해 봐.
+
+
+비밀번호를 입력했는데도 오류가 난다면, 관리자 계정으로 확인해야 해.
+
+
+---
+
+2. users.xml에서 비밀번호 확인
+
+ClickHouse의 사용자 계정 및 비밀번호는 /etc/clickhouse-server/users.xml 또는 /etc/clickhouse-server/config.xml에 설정돼 있어.
+
+1. 설정 파일 확인:
+
+sudo nano /etc/clickhouse-server/users.xml
+
+
+2. default 계정의 비밀번호 확인:
+
+<users>
+    <default>
+        <password>my_secure_password</password>
+    </default>
+</users>
+
+
+3. 저장 후 ClickHouse 서버 재시작:
+
+sudo systemctl restart clickhouse-server
+
+
+
+만약 <password></password> 부분이 비어 있다면, default 계정은 비밀번호 없이 로그인 가능하다는 뜻이야.
+
+
+---
+
+3. CSV Import 명령어에 비밀번호 추가
+
+패스워드가 필요하면, 명령어를 다음과 같이 수정해 줘.
+
+clickhouse-client -u default --password='my_secure_password' --query="INSERT INTO users FORMAT CSV" < /var/lib/clickhouse/user_files/data.csv
+
+
+---
+
+4. 패스워드 없는 계정이라면 옵션 제거
+
+만약 default 계정이 비밀번호 없이 설정된 경우, --password 옵션을 빼고 실행해야 해.
+
+clickhouse-client -u default --query="INSERT INTO users FORMAT CSV" < /var/lib/clickhouse/user_files/data.csv
+
+
+---
+
+5. 사용자 권한 문제 해결
+
+ClickHouse에 로그인한 후, 현재 계정이 Import 권한을 가지고 있는지 확인해 봐.
+
+SHOW GRANTS FOR default;
+
+만약 파일 읽기 권한이 없으면, 관리자 계정으로 접속해서 권한을 부여해 줘야 해.
+
+GRANT FILE ON *.* TO default;
+
+그리고 다시 Import를 시도해 봐.
+
+
+---
+
+결론
+
+1. ClickHouse에 로그인할 수 있는지 먼저 확인 (clickhouse-client -u default --password)
+
+
+2. users.xml에서 계정 비밀번호 확인
+
+
+3. CSV Import 명령어에 올바른 비밀번호 추가
+
+
+4. 비밀번호 없는 계정이면 --password 옵션 제거
+
+
+5. 파일 읽기 권한이 없으면 GRANT FILE 명령어 실행
+
+
+
+이렇게 하면 패스워드 오류 없이 CSV Import가 정상적으로 될 거야!
+
