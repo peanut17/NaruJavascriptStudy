@@ -1,0 +1,117 @@
+한 줄에 3MB 이상 되는 컬럼 A를 SELECT할 때 성능이 느려지는 문제를 해결하려면 몇 가지 최적화 방법을 적용할 수 있어.
+
+
+---
+
+1️⃣ 압축 (Compression) 최적화
+
+ClickHouse는 기본적으로 LZ4 압축을 사용하지만, ZSTD는 압축률이 더 높아서 대용량 데이터를 더 빠르게 읽을 수 있어.
+
+✅ 컬럼의 압축 코덱 변경
+
+ALTER TABLE my_table MODIFY COLUMN A CODEC(ZSTD(5));
+
+ZSTD(5)는 높은 압축률과 적절한 속도를 제공함.
+
+압축을 하면 디스크 IO를 줄여서 SELECT 속도가 개선됨.
+
+
+
+---
+
+2️⃣ 로우 단위가 아닌 부분적인 데이터 읽기 (SUBSTRING, LZ4Decompress 활용)
+
+컬럼 A가 **긴 문자열(TEXT, JSON, XML, BLOB 등)**이라면, 필요한 부분만 SELECT하는 게 좋음.
+
+✅ 특정 부분만 읽기
+
+SELECT substring(A, 1, 1000) FROM my_table;
+
+만약 컬럼 A가 JSON이면 JSONExtract를 사용해 필요한 값만 추출 가능.
+
+
+✅ 압축된 데이터라면 LZ4Decompress 사용
+
+SELECT LZ4Decompress(A) FROM my_table;
+
+데이터가 LZ4로 압축된 경우, LZ4Decompress(A)를 사용하면 성능이 개선됨.
+
+
+
+---
+
+3️⃣ 컬럼을 여러 개로 나누기 (Vertical Partitioning)
+
+컬럼 A가 JSON이나 로그 데이터처럼 여러 종류의 데이터를 포함하고 있다면, 필요한 부분만 조회하도록 컬럼을 분할하는 게 좋음.
+
+✅ 컬럼을 쪼개기
+
+ALTER TABLE my_table ADD COLUMN A_part1 String, ADD COLUMN A_part2 String;
+
+데이터를 인서트할 때 적절히 나눠서 저장한 후, 필요한 컬럼만 SELECT.
+
+
+✅ 쿼리 예시
+
+SELECT A_part1 FROM my_table;
+
+컬럼을 나누면 한 번에 읽어야 할 데이터 크기가 줄어들어 속도가 개선됨.
+
+
+
+---
+
+4️⃣ SELECT 시 블록 크기 조정 (max_block_size)
+
+ClickHouse는 기본적으로 한 번에 읽는 블록 크기를 조절할 수 있어.
+큰 데이터를 조회할 때는 max_block_size를 줄이면 메모리 사용량이 줄어들고 속도가 개선될 수도 있어.
+
+✅ 블록 크기 줄이기
+
+SET max_block_size = 4096;
+
+기본값(65,536)보다 줄이면 한 번에 처리하는 데이터 양이 작아져서 대형 컬럼을 다룰 때 유리함.
+
+
+
+---
+
+5️⃣ SELECT 시 LIMIT 사용
+
+컬럼 A가 크면 전체 데이터를 SELECT하지 말고, LIMIT을 적극적으로 활용하면 속도를 개선할 수 있음.
+
+✅ LIMIT 사용 예시
+
+SELECT A FROM my_table LIMIT 100;
+
+필요 없는 전체 데이터를 불러오는 걸 방지.
+
+
+
+---
+
+6️⃣ Lazy Loading 적용 (allow_experimental_analyzer)
+
+ClickHouse는 allow_experimental_analyzer를 활성화하면 컬럼을 필요할 때만 읽는 방식을 사용할 수 있음.
+
+✅ Lazy Loading 활성화
+
+SET allow_experimental_analyzer = 1;
+
+대형 컬럼을 선택적으로 로드하도록 유도할 수 있음.
+
+
+
+---
+
+✅ 최적화 방법 정리
+
+1️⃣ 압축 개선 → CODEC(ZSTD(5)) 적용
+2️⃣ 부분 데이터만 읽기 → substring(A, 1, 1000), JSONExtract() 활용
+3️⃣ 컬럼 분할 → A_part1, A_part2로 나눠서 SELECT
+4️⃣ 블록 크기 줄이기 → SET max_block_size = 4096;
+5️⃣ LIMIT 사용 → SELECT A FROM my_table LIMIT 100;
+6️⃣ Lazy Loading 적용 → SET allow_experimental_analyzer = 1;
+
+이 방법들을 조합하면 컬럼 A SELECT 속도가 훨씬 빨라질 거야! 🚀
+
