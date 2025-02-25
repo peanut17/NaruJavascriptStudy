@@ -3,12 +3,25 @@ ClickHouse에서 복잡한 쿼리(예: 300줄 이상, 다중 LEFT JOIN, ORDER BY
 
 1. 기본적인 성능 최적화 설정
 
+설정 값	                                  기본값	                설명	                            조정 방향
+max_memory_usage	                      10GB (환경에 따라 다름)	  쿼리당 최대 메모리 사용량	            충분한 메모리 확보 필요 (예: 30GB 이상 설정)
+max_bytes_before_external_group_by	    0 (비활성화)	          GROUP BY 메모리 초과 시 디스크 사용	  max_memory_usage의 50% 정도 설정 (예: 10GB)
+max_threads	                            CPU 코어 수	            병렬 실행 스레드 개수	              CPU 코어 수보다 살짝 적게 설정 (예: 8코어면 6~7)
+max_block_size	                        65,536	              한 번에 처리할 데이터 블록 크기	      큰 쿼리는 100,000~500,000으로 증가
+merge_tree_min_rows_for_concurrent_read	20M	                  병렬 읽기를 위한 최소 행 수	          테이블 크기에 맞게 증가 (예: 50M)
 
 ---
 
 2. JOIN 성능 최적화
 
 ClickHouse에서 LEFT JOIN이 많을 경우, system.settings 조정을 통해 성능을 개선할 수 있습니다.
+
+설정 값	                    기본값	          설명	                                          조정 방향
+join_algorithm	          auto	          JOIN 알고리즘 선택 (hash, merge, partial_merge)	hash 또는 partial_merge로 설정
+max_rows_in_join	        100,000,000	    JOIN 시 메모리에 올릴 최대 행 개수	                  큰 테이블 조인 시 증가 (500M~1B)
+join_use_nulls	          0	              NULL 처리 방식	                                1로 설정 시 LEFT JOIN 성능 향상
+distributed_product_mode	deny	          분산 조인 허용 여부	                              local 또는 global로 변경
+
 
 추가 최적화 팁:
 
@@ -26,6 +39,12 @@ JOIN ON에서 = 비교 연산자를 사용할 경우 성능이 더 좋음
 
 ClickHouse의 정렬(ORDER BY)과 ROWNUM(LIMIT N, OFFSET) 연산은 많은 CPU와 메모리를 사용합니다.
 
+설정 값	                                기본값	        설명	                            조정 방향
+max_rows_to_sort	                    1000000000	  정렬 시 메모리에 올릴 최대 행 수	      필요한 경우 증가 (2B~5B)
+max_bytes_before_external_sort	      0	            정렬 시 디스크 사용 임계값	          max_memory_usage의 30~50% 설정
+optimize_sorting_by_input_order	      0	            정렬 시 입력 순서를 고려할지 여부	      1로 설정하면 특정 상황에서 성능 향상 가능
+low_cardinality_allow_in_native_format	1	          LowCardinality 데이터 형식 최적화	  기본값 유지 (1)
+
 추가 최적화 팁:
 
 ORDER BY 전에 WHERE 조건을 최대한 적용하여 데이터 줄이기
@@ -38,6 +57,11 @@ LIMIT을 먼저 적용하고 그 범위에서 ORDER BY 수행
 
 4. 쿼리 실행 방식 최적화
 
+설정 값	                                  기본값	  설명	                        조정 방향
+allow_experimental_analyzer	            0	      새로운 쿼리 분석기 사용 여부	      1로 설정 시 복잡한 쿼리 최적화 가능
+use_uncompressed_cache	                0	      압축되지 않은 블록 캐시 사용	      1로 설정 시 디스크 IO 감소
+allow_experimental_lightweight_delete	  0	      DELETE 성능 최적화	            1로 설정 시 삭제 쿼리 성능 향상
+input_format_parallel_parsing	          1	      입력 데이터 병렬 파싱	          1 유지 (비활성화하면 성능 저하)
 
 ---
 
