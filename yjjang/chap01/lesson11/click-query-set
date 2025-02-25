@@ -1,0 +1,381 @@
+system.settings 테이블에서는 ClickHouse의 다양한 설정 값을 조회할 수 있으며, 쿼리 성능 개선을 위해 조정할 수 있는 중요한 설정들이 많습니다. 주요 성능 관련 설정을 정리하면 다음과 같습니다.
+
+
+---
+
+1. 병렬 처리 관련 설정
+
+- max_threads
+
+설명: 병렬 쿼리를 실행할 때 사용할 최대 스레드 수
+
+기본값: auto (보통 CPU 코어 수)
+
+추천값: (CPU 코어 수) * 2 또는 워크로드에 맞게 조정
+
+설정 예시:
+
+SET max_threads = 16;
+
+
+- max_block_size
+
+설명: 한 번에 처리하는 블록 크기 (행 수 기준)
+
+기본값: 65536
+
+추천값: 쿼리 성능을 테스트하면서 조정
+
+설정 예시:
+
+SET max_block_size = 131072;
+
+
+
+---
+
+2. 쿼리 최적화 관련 설정
+
+- optimize_move_to_prewhere
+
+설명: WHERE 절을 PREWHERE로 자동 이동하여 성능 개선
+
+기본값: 1 (활성화)
+
+추천값: 1 유지
+
+설정 예시:
+
+SET optimize_move_to_prewhere = 1;
+
+
+- force_index_by_date
+
+설명: 날짜 기반 인덱스를 강제 적용하여 범위 쿼리 최적화
+
+기본값: 0
+
+추천값: 1 (날짜 기반 쿼리가 많을 경우)
+
+설정 예시:
+
+SET force_index_by_date = 1;
+
+
+- force_primary_key
+
+설명: PRIMARY KEY 사용 강제 적용
+
+기본값: 0
+
+추천값: 1 (Primary Key 범위를 활용할 경우)
+
+설정 예시:
+
+SET force_primary_key = 1;
+
+
+
+---
+
+3. 메모리 및 캐싱 관련 설정
+
+- max_memory_usage
+
+설명: 단일 쿼리가 사용할 수 있는 최대 메모리
+
+기본값: 0 (무제한)
+
+추천값: 전체 RAM의 50~80% 수준으로 조정
+
+설정 예시:
+
+SET max_memory_usage = 10G;
+
+
+- memory_overcommit_ratio_denominator
+
+설명: 메모리 오버커밋 허용 수준 조정
+
+기본값: 3
+
+추천값: 2 (메모리 부족 현상 방지)
+
+설정 예시:
+
+SET memory_overcommit_ratio_denominator = 2;
+
+
+- query_cache_size
+
+설명: 쿼리 캐시 크기 (0이면 비활성화)
+
+기본값: 0
+
+추천값: 1G 또는 사용 패턴에 맞게 조정
+
+설정 예시:
+
+SET query_cache_size = 1G;
+
+
+
+---
+
+4. 쿼리 실행 시간 및 제한
+
+- max_execution_time
+
+설명: 쿼리 실행 시간 제한 (초 단위)
+
+기본값: 0 (무제한)
+
+추천값: 600 (10분) 또는 워크로드에 맞게 조정
+
+설정 예시:
+
+SET max_execution_time = 600;
+
+
+- max_rows_to_read
+
+설명: 쿼리에서 읽을 수 있는 최대 행 수 제한
+
+기본값: 0 (무제한)
+
+추천값: 데이터 크기에 따라 조정
+
+설정 예시:
+
+SET max_rows_to_read = 1e9;
+
+
+
+---
+
+5. 압축 및 저장소 관련 설정
+
+- compression
+
+설명: 압축 설정 (lz4, zstd, none)
+
+기본값: lz4
+
+추천값: zstd (더 나은 압축률 제공)
+
+설정 예시:
+
+SET compression = 'zstd';
+
+
+- merge_tree_min_rows_for_concurrent_read
+
+설명: 병렬 읽기를 위한 최소 행 수
+
+기본값: 200000
+
+추천값: 더 높은 값으로 조정 (예: 500000)
+
+설정 예시:
+
+SET merge_tree_min_rows_for_concurrent_read = 500000;
+
+
+
+---
+
+✅ 설정 적용 방법
+
+1. 세션별 적용
+
+SET max_threads = 16;
+
+→ 현재 세션에서만 적용됨.
+
+
+2. 전역 설정 변경 (config.xml 수정)
+
+/etc/clickhouse-server/config.xml 또는 users.xml에서 설정 변경 후 ClickHouse 재시작 필요:
+
+
+<max_threads>16</max_threads>
+
+sudo systemctl restart clickhouse-server
+
+
+
+
+
+
+---
+
+이 설정들을 적용하면 ClickHouse의 쿼리 성능을 크게 향상시킬 수 있습니다.
+특히, 워크로드에 따라 병렬 처리, 인덱스 활용, 캐싱 등을 적절히 조정하는 것이 중요합니다. 🚀
+
+
+
+
+
+
+
+ClickHouse에서 제공하는 성능 튜닝 설정들은 대부분 복잡한 쿼리에도 적용되지만, 모든 설정이 항상 모든 쿼리에 동일한 효과를 주는 것은 아닙니다.
+
+복잡한 쿼리에 대해 설정이 어떻게 적용되는지, 그리고 주의해야 할 점을 설명해 줄게요.
+
+
+---
+
+1️⃣ 병렬 처리 관련 (max_threads, max_block_size)
+
+✅ 대부분의 복잡한 쿼리에 적용됨
+❌ 하지만 일부 경우에는 제한됨
+
+적용됨: GROUP BY, JOIN, ORDER BY 같은 연산에서 병렬 실행 가능
+
+제한됨: 서브쿼리가 많거나, 싱글 스레드로 실행되는 특정 함수 사용 시
+
+예제:
+
+SET max_threads = 16;
+SELECT user_id, COUNT(*) 
+FROM user_logs 
+GROUP BY user_id;
+
+
+
+---
+
+2️⃣ 쿼리 최적화 관련 (optimize_move_to_prewhere, force_index_by_date)
+
+✅ WHERE 조건이 있는 쿼리에는 효과적
+❌ 하지만 모든 경우에 강제 적용되지는 않음
+
+PREWHERE 최적화는 컬럼 압축을 풀지 않고 바로 필터링할 수 있을 때만 적용됨.
+
+force_index_by_date는 테이블에 날짜 컬럼이 Primary Key나 Partition Key로 설정되어 있어야만 효과 있음.
+
+비효율적인 경우:
+
+SELECT * FROM user_logs WHERE event_date = '2025-01-01';
+
+event_date가 INDEX가 아니면 성능 개선 효과 없음.
+
+
+
+✅ 최적화 적용 예시
+
+SET optimize_move_to_prewhere = 1;
+SET force_index_by_date = 1;
+SELECT * FROM user_logs WHERE event_date = '2025-01-01' AND user_id = 12345;
+
+event_date가 인덱스로 설정된 경우 빠르게 검색 가능.
+
+
+
+---
+
+3️⃣ 메모리 및 캐싱 관련 (max_memory_usage, query_cache_size)
+
+✅ 대량의 데이터를 처리하는 쿼리에는 적용됨
+❌ 하지만 특정 연산에서는 효과 없음
+
+캐싱(query_cache_size)은 동일한 쿼리를 반복 실행할 때만 유효
+
+JOIN, ORDER BY, DISTINCT 같은 연산에서 메모리 사용량이 많으면 max_memory_usage로 제한 가능
+
+비효율적인 경우:
+
+GROUP BY 시 메모리 초과로 실행 중단됨
+
+
+SET max_memory_usage = 10G;
+SELECT country, COUNT(*) FROM user_logs GROUP BY country;
+
+
+✅ JOIN 최적화 예시 (메모리 최적화)
+
+SET max_memory_usage = 20G;
+SET join_algorithm = 'hash';
+SELECT a.user_id, b.purchase_amount 
+FROM users a 
+JOIN purchases b ON a.user_id = b.user_id;
+
+hash join을 사용하면 대용량 데이터에서 더 빠르게 JOIN 가능.
+
+
+
+---
+
+4️⃣ 쿼리 실행 시간 제한 (max_execution_time, max_rows_to_read)
+
+✅ 쿼리가 너무 오래 걸리는 경우 제한 가능
+❌ 하지만 내부적으로 쿼리가 분할 실행되면 일부 제한이 적용되지 않을 수도 있음
+
+복잡한 쿼리는 여러 개의 서브쿼리로 나뉘어 실행되므로 각 서브쿼리에 개별적으로 적용되지 않으면 일부 실행이 계속될 수도 있음.
+
+예제: (10초 이상 실행되는 쿼리는 중단됨)
+
+SET max_execution_time = 10;
+SELECT * FROM big_table WHERE some_column LIKE '%search_term%';
+
+
+
+---
+
+5️⃣ 압축 및 저장소 최적화 (compression, merge_tree_min_rows_for_concurrent_read)
+
+✅ MergeTree 엔진을 사용하는 테이블에 적용됨
+❌ 하지만 다른 엔진에서는 효과 없음
+
+compression = 'zstd' 같은 설정은 테이블 저장소에 적용되므로, 이미 존재하는 데이터에는 영향을 주지 않음.
+
+예제: (압축 활성화)
+
+SET compression = 'zstd';
+CREATE TABLE optimized_table ENGINE = MergeTree()
+ORDER BY user_id
+SETTINGS index_granularity = 8192;
+
+
+
+---
+
+🔥 결론: 모든 설정이 복잡한 쿼리에 적용되는 것은 아님!
+
+1. ✅ WHERE, GROUP BY, JOIN 최적화는 대부분 적용됨.
+
+
+2. ❌ 쿼리 내부적으로 쪼개지거나 싱글 스레드 연산이 많으면 max_threads 효과 제한됨.
+
+
+3. ❌ 캐시(query_cache_size)는 동일한 쿼리 반복 실행이 아니면 효과 없음.
+
+
+4. ✅ 메모리 제한(max_memory_usage)과 실행 시간 제한(max_execution_time)은 복잡한 쿼리에서 유용함.
+
+
+5. ❌ 테이블 엔진이 MergeTree가 아니면 일부 최적화(force_index_by_date 등) 적용되지 않음.
+
+
+
+
+---
+
+💡 👉 최적화 적용 체크리스트
+
+테이블 엔진이 MergeTree인가? → index, force_primary_key 적용 가능
+
+WHERE 절에 인덱스 컬럼이 포함되어 있는가? → optimize_move_to_prewhere 효과 있음
+
+쿼리 실행 시간이 너무 긴가? → max_execution_time, max_memory_usage 조정
+
+JOIN이 느린가? → join_algorithm, max_bytes_before_external_join 조정
+
+
+
+---
+
+⚡ 결국, 최적화 설정은 쿼리 구조와 데이터 특성에 따라 다르게 적용됨.
+🔥 한 가지 설정으로 모든 복잡한 쿼리를 최적화할 수는 없지만, 적절한 조합을 찾으면 ClickHouse 성능을 극대화할 수 있음! 🚀
+
+
