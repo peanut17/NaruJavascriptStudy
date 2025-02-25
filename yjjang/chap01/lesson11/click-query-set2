@@ -1,0 +1,112 @@
+
+ClickHouse에서 복잡한 쿼리(예: 300줄 이상, 다중 LEFT JOIN, ORDER BY, ROWNUM 사용)의 성능을 개선하려면 여러 system.settings 값 조정이 필요합니다.
+
+1. 기본적인 성능 최적화 설정
+
+
+---
+
+2. JOIN 성능 최적화
+
+ClickHouse에서 LEFT JOIN이 많을 경우, system.settings 조정을 통해 성능을 개선할 수 있습니다.
+
+추가 최적화 팁:
+
+JOIN ON에서 = 비교 연산자를 사용할 경우 성능이 더 좋음
+
+조인할 테이블을 JOIN이 아닌 subquery (IN 또는 ARRAY JOIN) 방식으로 변경 가능
+
+조인 대상이 작은 테이블이라면 JOIN 대신 dictGet() 활용
+
+
+
+---
+
+3. ORDER BY & ROWNUM 최적화
+
+ClickHouse의 정렬(ORDER BY)과 ROWNUM(LIMIT N, OFFSET) 연산은 많은 CPU와 메모리를 사용합니다.
+
+추가 최적화 팁:
+
+ORDER BY 전에 WHERE 조건을 최대한 적용하여 데이터 줄이기
+
+LIMIT을 먼저 적용하고 그 범위에서 ORDER BY 수행
+
+
+
+---
+
+4. 쿼리 실행 방식 최적화
+
+
+---
+
+5. 쿼리 실행 방식 개선 (예제)
+
+✅ JOIN 최적화
+
+SET join_algorithm = 'partial_merge';  -- 메모리 사용량 줄이기
+SET max_rows_in_join = 500000000;  -- JOIN 테이블 크기 증가
+
+SELECT a.id, a.name, b.category
+FROM large_table a
+LEFT JOIN small_table b ON a.id = b.id;
+
+> partial_merge를 사용하면 메모리 부족 시 디스크를 활용하여 성능을 안정적으로 유지 가능.
+
+
+
+
+---
+
+✅ ORDER BY 최적화
+
+SET max_bytes_before_external_sort = 5000000000;  -- 정렬 시 디스크 사용 허용
+
+SELECT *
+FROM large_table
+ORDER BY date DESC
+LIMIT 100000;
+
+> 큰 테이블 정렬 시 메모리를 초과하면 디스크를 활용하도록 설정.
+
+
+
+
+---
+
+✅ LIMIT & OFFSET 최적화
+
+SET optimize_skip_unused_shards = 1;  -- 필요 없는 샤드 무시
+
+SELECT *
+FROM large_table
+WHERE some_condition
+ORDER BY id
+LIMIT 10000 OFFSET 500000;
+
+> optimize_skip_unused_shards=1을 설정하면 샤드 전체를 읽지 않고 필요한 데이터만 읽음.
+
+
+
+
+---
+
+🔥 최적화 정리
+
+1. JOIN: partial_merge 알고리즘 사용, max_rows_in_join 증가
+
+
+2. ORDER BY: max_bytes_before_external_sort 설정하여 디스크 활용
+
+
+3. LIMIT & OFFSET: optimize_skip_unused_shards=1으로 불필요한 데이터 읽기 방지
+
+
+4. 쿼리 실행 방식: allow_experimental_analyzer=1 활성화
+
+
+
+이렇게 설정하면 ClickHouse에서 복잡한 쿼리의 성능이 크게 향상됩니다. 🚀
+추가적으로 쿼리 실행 계획(EXPLAIN)을 확인하면서 튜닝하면 더욱 효과적입니다.
+
