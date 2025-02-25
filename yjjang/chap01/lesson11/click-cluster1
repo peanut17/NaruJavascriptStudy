@@ -1,0 +1,139 @@
+
+A 서버에서 ClickHouse를 운영하다가 B 서버를 추가하고 클러스터링할 때, 몇 가지 주의할 점이 있어. 설정을 잘하면 문제없이 확장할 수 있지만, 몇 가지 이슈가 발생할 수도 있어. 🚀
+
+
+---
+
+✅ A 서버에 ClickHouse 운영 중, B 서버 추가 시 발생할 수 있는 문제점
+
+1️⃣ 데이터 불균형 문제
+
+👉 A 서버에서 기존 데이터를 보유하고 있는데, B 서버가 새로 추가되면 데이터가 자동으로 복제되지는 않아.
+👉 즉, B 서버는 빈 상태이고, A 서버만 데이터를 가지고 있는 상황이 발생할 수 있어.
+👉 해결 방법:
+
+ReplicatedMergeTree를 사용하면 A 서버의 데이터를 B 서버로 복제 가능
+
+새 노드 추가 후 기존 데이터를 수동으로 이관할 수도 있음
+
+
+💡 해결 방법 (예시)
+A 서버에 기존 테이블이 있다면, 클러스터링할 때 ReplicatedMergeTree를 사용해 B 서버로 복제해야 해.
+
+CREATE TABLE my_table ON CLUSTER my_cluster (
+    id UInt64,
+    name String,
+    age UInt8
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/my_table', '{replica}')
+ORDER BY id;
+
+📌 이렇게 하면, A 서버의 데이터를 자동으로 B 서버에 복제할 수 있음.
+
+
+---
+
+2️⃣ 기존 테이블과 클러스터 테이블 충돌 가능성
+
+👉 A 서버에서 MergeTree 테이블을 사용 중인데, 클러스터를 추가하면 B 서버에서도 동일한 테이블을 가져야 함.
+👉 Distributed 테이블을 생성할 때, 기존 MergeTree 테이블과 충돌이 발생할 수도 있음.
+👉 해결 방법: 기존 테이블을 ReplicatedMergeTree로 변경 후 클러스터링
+
+💡 해결 방법 (예시)
+A 서버에서 기존 MergeTree 테이블을 ReplicatedMergeTree로 변환해야 해.
+
+ALTER TABLE my_table ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/my_table', '{replica}');
+
+이렇게 하면 클러스터 환경에서도 데이터가 자동 동기화돼.
+
+
+---
+
+3️⃣ 쿼리 속도 저하 가능성 (샤딩 & 부하 분산 문제)
+
+👉 A 서버는 기존 데이터를 다 가지고 있고, B 서버는 새롭게 추가된 상태.
+👉 클러스터링했더라도 데이터 분배가 균등하지 않으면 부하가 A 서버에 집중될 수 있음.
+👉 해결 방법: 샤딩을 설정하여 데이터 분산
+
+💡 샤딩 설정 (예시)
+Distributed 테이블을 만들어서, A/B 서버에 데이터를 랜덤하게 분배할 수 있어.
+
+CREATE TABLE my_distributed_table 
+ENGINE = Distributed(my_cluster, default, my_table, rand());
+
+이제 데이터를 삽입하면 A, B 서버로 자동 분산됨.
+
+
+---
+
+4️⃣ 클러스터 설정 문제 (config.xml)
+
+👉 클러스터를 구성하려면 A, B 서버의 config.xml 파일을 수정해야 함.
+👉 A 서버에서는 기존 설정을 유지하고, B 서버에서는 A와 B를 모두 포함하는 클러스터 설정을 해야 함.
+
+💡 해결 방법 (config.xml 예시)
+A, B 서버 모두 아래와 같이 설정해야 함. (/etc/clickhouse-server/config.xml)
+
+<remote_servers>
+    <my_cluster>
+        <shard>
+            <replica>
+                <host>A_server_IP</host>
+                <port>9000</port>
+            </replica>
+            <replica>
+                <host>B_server_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+    </my_cluster>
+</remote_servers>
+
+🔹 A, B 서버에서 동일한 config.xml 설정 필요
+🔹 ClickHouse 재시작 필수:
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+5️⃣ Failover & 데이터 일관성 문제
+
+👉 B 서버가 추가되었지만, Failover(장애 조치)가 정상적으로 작동하는지 확인해야 함.
+👉 예를 들어, A 서버가 다운되었을 때 B 서버가 정상적으로 작동하는지 체크해야 함.
+👉 해결 방법: ON CLUSTER 명령어를 사용하여 테이블을 동기화
+
+💡 해결 방법 (Failover 설정 예시)
+
+CREATE TABLE my_table ON CLUSTER my_cluster (
+    id UInt64,
+    name String,
+    age UInt8
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/my_table', '{replica}')
+ORDER BY id;
+
+이렇게 하면 A 서버가 다운되더라도 B 서버가 데이터를 유지할 수 있음.
+
+
+---
+
+🔥 결론: A 서버에서 B 서버 추가 시 주의할 점
+
+✅ 문제점 & 해결 방법 정리 | 문제점 | 해결 방법 | |--------|------------| | 데이터 불균형 | ReplicatedMergeTree 사용하여 복제 | | 기존 테이블 충돌 가능성 | 기존 테이블을 ReplicatedMergeTree로 변경 | | 부하 분산 문제 | Distributed 테이블로 샤딩 | | 클러스터 설정 문제 | config.xml에서 모든 노드를 설정 | | Failover 문제 | ReplicatedMergeTree + 클러스터 테이블 적용 |
+
+✅ B 서버 추가 후 해야 할 작업
+
+1. config.xml 설정 변경 (A, B 서버 모두 적용)
+
+
+2. ReplicatedMergeTree로 테이블 엔진 변경
+
+
+3. Distributed 테이블을 추가하여 샤딩 적용
+
+
+4. ClickHouse 재시작 및 동작 테스트
+
+
+
+👉 이렇게 하면 B 서버를 추가해도 기존 데이터와 잘 연동되고, 부하 분산도 가능해! 🚀
+
