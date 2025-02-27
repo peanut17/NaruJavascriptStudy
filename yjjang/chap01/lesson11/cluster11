@@ -1,0 +1,137 @@
+
+Ubuntu 서버 두 대에 ClickHouse를 설치했다면, 이제 클러스터를 구성하는 방법과 테스트하는 방법을 알려줄게.
+
+
+---
+
+1. ClickHouse 클러스터 구성 방법
+
+클러스터를 구성하려면 두 노드가 서로 통신할 수 있어야 하며, 동일한 설정 파일을 사용해야 해.
+
+1-1. 두 서버 정보
+
+예제에서는 다음과 같이 가정할게.
+
+A 서버: 192.168.1.10
+
+B 서버: 192.168.1.20
+
+ClickHouse 클러스터 이름: my_cluster
+
+
+1-2. 설정 파일 수정
+
+ClickHouse 설정 파일을 수정해야 해.
+
+(1) 클러스터 설정 추가 (/etc/clickhouse-server/config.xml)
+
+두 서버 모두에서 /etc/clickhouse-server/config.xml 파일을 열어서 <remote_servers> 섹션을 추가해.
+
+<yandex>
+    <remote_servers>
+        <my_cluster>
+            <shard>
+                <replica>
+                    <host>192.168.1.10</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>192.168.1.20</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </my_cluster>
+    </remote_servers>
+</yandex>
+
+📌 설정 설명
+
+my_cluster 클러스터에 shard 1개를 추가.
+
+shard에는 replica(복제본)로 두 서버를 추가.
+
+각 서버의 IP와 ClickHouse의 기본 포트(9000) 지정.
+
+
+(2) 재시작
+
+두 서버에서 설정을 반영하기 위해 ClickHouse를 재시작해.
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+2. 클러스터 테스트 방법
+
+클러스터가 제대로 작동하는지 확인하려면 다음을 실행하면 돼.
+
+2-1. 클러스터 상태 확인
+
+A 서버 또는 B 서버에서 다음 명령 실행:
+
+clickhouse-client --query "SELECT * FROM system.clusters WHERE cluster='my_cluster'"
+
+출력 예시
+
+my_cluster	192.168.1.10	9000
+my_cluster	192.168.1.20	9000
+
+=> 클러스터가 정상적으로 구성되었음을 의미.
+
+2-2. 샤드 & 복제본 테스트
+
+(1) 클러스터 테이블 생성
+
+A 서버에서 실행:
+
+CREATE TABLE test_table
+(
+    id UInt32,
+    name String
+) ENGINE = Distributed('my_cluster', 'default', 'test_table_local', id);
+
+각 서버에서 로컬 테이블도 만들어야 해.
+
+CREATE TABLE test_table_local
+(
+    id UInt32,
+    name String
+) ENGINE = MergeTree()
+ORDER BY id;
+
+(2) 데이터 삽입
+
+A 서버에서 실행:
+
+INSERT INTO test_table VALUES (1, 'Alice'), (2, 'Bob');
+
+(3) 데이터 조회
+
+B 서버에서 실행:
+
+SELECT * FROM test_table;
+
+결과
+
+1   Alice
+2   Bob
+
+=> 데이터가 샤드와 복제본을 통해 조회됨을 확인할 수 있음.
+
+
+---
+
+3. 추가 기능
+
+클러스터에서 더 고급 기능을 사용하려면:
+
+1. 복제 테이블 (ReplicatedMergeTree): 자동 동기화를 위해 ReplicatedMergeTree 사용 가능.
+
+
+2. 분산 쿼리 실행 (Distributed 엔진): 노드 간 부하 분산을 위해 사용.
+
+
+
+필요하면 더 자세히 알려줄 수 있어! 🚀
+
