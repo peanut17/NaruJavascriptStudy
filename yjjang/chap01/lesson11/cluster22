@@ -1,0 +1,155 @@
+
+ClickHouse 클러스터를 구성하면 분산 쿼리를 활용해서 여러 노드에서 병렬 처리할 수 있어.
+클러스터링을 활용한 병렬 쿼리 방법을 설명할게.
+
+
+---
+
+1. 병렬 처리를 위한 테이블 생성
+
+병렬 쿼리를 실행하려면 Distributed 엔진을 사용해야 해.
+
+1-1. 로컬 테이블 생성 (MergeTree)
+
+각 노드(A, B)에서 로컬 테이블을 만들어야 해.
+
+CREATE TABLE test_table_local
+(
+    id UInt32,
+    name String,
+    value Float64
+) ENGINE = MergeTree()
+ORDER BY id;
+
+1-2. 분산 테이블 생성 (Distributed)
+
+A 또는 B 노드에서 실행.
+이 테이블을 통해 여러 노드에서 병렬 실행할 수 있어.
+
+CREATE TABLE test_table
+(
+    id UInt32,
+    name String,
+    value Float64
+) ENGINE = Distributed('my_cluster', 'default', 'test_table_local', id);
+
+📌 설명
+
+Distributed('my_cluster', 'default', 'test_table_local', id);
+
+my_cluster: 클러스터 이름
+
+default: 데이터베이스 이름
+
+test_table_local: 각 노드에서 사용할 로컬 테이블
+
+id: 샤딩 키(기본적으로 hash(id) % 노드 수 방식으로 데이터 분배)
+
+
+
+
+---
+
+2. 병렬 처리 쿼리 실행
+
+이제 병렬 처리를 활용하는 방법을 알려줄게.
+
+2-1. 병렬 실행 기본
+
+분산 테이블을 대상으로 쿼리하면 자동으로 병렬 실행돼.
+
+SELECT count(*) FROM test_table;
+
+위 쿼리는 test_table_local을 각 노드에서 실행한 후, 최종 결과를 합쳐서 반환해.
+
+2-2. GROUP BY 최적화
+
+SELECT name, SUM(value) 
+FROM test_table
+GROUP BY name;
+
+각 노드에서 GROUP BY 실행 후 결과를 합치므로 성능이 향상돼.
+
+2-3. 특정 노드에서 실행
+
+모든 노드가 아니라 특정 노드에서 실행하고 싶다면:
+
+SELECT * FROM remote('192.168.1.10', default, test_table_local)
+WHERE value > 50;
+
+이렇게 하면 192.168.1.10 노드에서만 실행돼.
+
+2-4. 병렬 조인 최적화
+
+일반적으로 JOIN 연산은 병렬 처리 성능을 저하시킬 수 있어.
+이를 최적화하려면 **distributed_product_mode = 'local'**을 설정해야 해.
+
+SET distributed_product_mode = 'local';
+
+SELECT a.id, a.name, b.some_column
+FROM test_table AS a
+JOIN another_distributed_table AS b
+ON a.id = b.id;
+
+
+---
+
+3. 성능 최적화 추가 팁
+
+3-1. 샤딩 키 최적화
+
+샤딩 키를 잘못 설정하면 특정 노드에 부하가 집중될 수 있어.
+예를 들어, id가 고유 값이면 적절하지만, date 같은 값으로 샤딩하면 일부 노드만 사용될 수도 있어.
+
+예제: 날짜 기반 샤딩 (비추천)
+
+ENGINE = Distributed('my_cluster', 'default', 'test_table_local', date);
+
+👉 특정 날짜에 쏠림 발생 가능.
+
+예제: id 기반 샤딩 (추천)
+
+ENGINE = Distributed('my_cluster', 'default', 'test_table_local', id);
+
+👉 데이터가 고르게 분포됨.
+
+
+---
+
+3-2. distributed_push_down_limit 활성화
+
+LIMIT이 적용된 쿼리를 실행할 때 각 노드에서 제한을 적용하려면:
+
+SET distributed_push_down_limit = 1;
+
+SELECT * FROM test_table ORDER BY value DESC LIMIT 10;
+
+👉 각 노드에서 LIMIT 10을 실행한 후 최종 정렬, 성능 향상 가능.
+
+
+---
+
+3-3. parallel_distributed_insert_select 활성화
+
+데이터를 삽입할 때도 병렬 처리가 가능해.
+
+SET parallel_distributed_insert_select = 1;
+
+INSERT INTO test_table
+SELECT * FROM another_table;
+
+👉 각 노드에서 분산 처리하여 삽입 성능 향상.
+
+
+---
+
+4. 요약
+
+✅ 병렬 실행을 위해 Distributed 테이블 사용
+✅ 샤딩 키를 잘 설정해서 부하 분산
+✅ distributed_push_down_limit, parallel_distributed_insert_select 설정으로 성능 최적화
+✅ JOIN 성능 최적화를 위해 distributed_product_mode = 'local' 사용
+
+이렇게 설정하면 ClickHouse 클러스터에서 병렬 쿼리를 최적화할 수 있어! 🚀
+더 궁금한 게 있으면 물어봐~
+
