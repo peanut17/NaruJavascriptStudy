@@ -1,0 +1,144 @@
+
+클러스터에서 A 서버와 B 서버에 로드밸런싱처럼 데이터를 분배하려면, Distributed 엔진을 사용하여 데이터를 자동으로 분배하고 각 노드에서 고르게 데이터를 삽입하는 방법을 사용할 수 있어. 이를 통해 두 서버에 데이터를 균등하게 분배할 수 있어.
+
+1. 데이터 분배 방식: 샤딩(Sharding)
+
+ClickHouse의 Distributed 엔진은 기본적으로 **샤딩(Sharding)**을 통해 데이터를 분배해.
+샤딩은 데이터를 특정 키를 기준으로 나누어 여러 노드에 분배하는 방법이야.
+
+
+---
+
+2. Distributed 테이블 생성 및 샤딩 키 설정
+
+2-1. 로컬 테이블 생성 (MergeTree)
+
+각 서버에서 test_table_local 테이블을 생성할 때는 MergeTree 엔진을 사용하고, id와 같은 샤딩 키를 기준으로 데이터를 나눠야 해.
+
+A 서버와 B 서버에서 각각 로컬 테이블을 생성:
+
+CREATE TABLE test_table_local
+(
+    id UInt32,
+    name String,
+    value Float64
+) ENGINE = MergeTree()
+ORDER BY id;  -- id를 기준으로 샤딩
+
+2-2. Distributed 테이블 생성 (클러스터에서 데이터 분배)
+
+이제 A 서버나 B 서버에서 Distributed 테이블을 생성하여, 데이터를 두 노드에 분배할 수 있어.
+
+CREATE TABLE test_table
+(
+    id UInt32,
+    name String,
+    value Float64
+) ENGINE = Distributed('my_cluster', 'default', 'test_table_local', id);
+
+📌 설명
+
+my_cluster: 클러스터 이름.
+
+default: 데이터베이스 이름.
+
+test_table_local: 각 노드에서 사용할 로컬 테이블 이름.
+
+id: 샤딩 키로 사용할 열(여기서는 id 기준으로 데이터 분배).
+
+
+2-3. 데이터 삽입 (로컬 테이블에 분배)
+
+이제 test_table에 데이터를 삽입하면 Distributed 엔진이 자동으로 데이터를 A 서버와 B 서버에 분배해줘.
+
+INSERT INTO test_table (id, name, value) 
+VALUES (1, 'Alice', 100), (2, 'Bob', 200), (3, 'Charlie', 300);
+
+📌 설명
+
+test_table에 데이터를 삽입하면 id 값을 기준으로 자동으로 데이터를 A 서버와 B 서버에 분배됨.
+
+
+
+---
+
+3. 데이터 분배 확인
+
+A 서버와 B 서버에 데이터가 균등하게 분배되었는지 확인하려면, 각 서버의 로컬 테이블을 조회해볼 수 있어.
+
+3-1. A 서버에서 로컬 테이블 확인
+
+SELECT * FROM test_table_local;
+
+3-2. B 서버에서 로컬 테이블 확인
+
+SELECT * FROM test_table_local;
+
+결과 예시:
+
+id가 1인 데이터는 A 서버에,
+
+id가 2인 데이터는 B 서버에 있을 거야.
+
+
+
+---
+
+4. 데이터 분배를 위한 샤딩 키 최적화
+
+데이터를 고르게 분배하려면 샤딩 키를 잘 선택하는 것이 중요해.
+**id**와 같은 고유한 값을 샤딩 키로 사용하면 데이터가 균등하게 분배돼.
+
+4-1. 샤딩 키가 균등하지 않은 경우
+
+예를 들어, 날짜(date)나 특정 구간에 쏠리는 값으로 샤딩 키를 설정하면 일부 노드에 데이터가 집중될 수 있어. 이런 경우에는 샤딩 키를 고유값인 id나 잘 분포된 다른 값으로 설정하는 것이 좋아.
+
+4-2. 샤딩 키 수정 예시
+
+만약 id 외에도 다른 컬럼을 기준으로 데이터를 분배하고 싶다면, 다음과 같이 샤딩 키를 바꿀 수 있어:
+
+CREATE TABLE test_table
+(
+    id UInt32,
+    name String,
+    value Float64
+) ENGINE = Distributed('my_cluster', 'default', 'test_table_local', cityHash64(name) % 2);
+
+📌 설명
+
+여기서는 name을 기준으로 cityHash64(name) % 2 방식으로 샤딩을 설정.
+
+이를 통해 name 값에 따라 2개의 노드(A, B)에 고르게 분배될 수 있어.
+
+
+
+---
+
+5. 데이터 로드 밸런싱 확인
+
+클러스터에서 데이터가 잘 분배되었는지 확인하려면 system.parts 테이블을 조회하여 각 노드의 데이터를 확인할 수 있어.
+
+SELECT
+    table,
+    active_replicas,
+    total_replicas,
+    name,
+    partition,
+    replica_path
+FROM system.parts
+WHERE table = 'test_table_local';
+
+이 쿼리를 통해 각 노드에서 데이터가 어떻게 분배되었는지, 어느 노드가 데이터를 보유하고 있는지 확인할 수 있어.
+
+
+---
+
+6. 요약
+
+✅ 로컬 테이블을 MergeTree 엔진으로 생성하고, Distributed 테이블을 사용하여 샤딩 키를 기준으로 데이터 분배
+✅ 자동으로 A 서버와 B 서버에 데이터를 분배하여 로드 밸런싱 효과를 얻을 수 있어
+✅ 샤딩 키를 잘 설정하여 데이터가 균등하게 분배되도록 주의
+
+이렇게 하면 데이터를 자동으로 분배해서 로드 밸런싱처럼 데이터를 넣을 수 있어!
+궁금한 점이 있으면 또 물어봐! 😃
+
