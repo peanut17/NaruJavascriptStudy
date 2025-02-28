@@ -1,0 +1,55 @@
+
+Distributed 테이블과 분배할 테이블을 생성하는 데에는 적절한 순서가 필요합니다. 보통 먼저 기본 테이블을 생성한 후, 그 테이블을 분배할 Distributed 테이블을 생성하는 방식으로 진행합니다. 그 이유는 Distributed 테이블이 참조하는 대상 테이블이 이미 존재해야 하기 때문입니다.
+
+순서:
+
+1. 기본 테이블 (MergeTree 등) 생성:
+
+기본 테이블을 생성할 때는 MergeTree 또는 다른 엔진을 사용하여 데이터를 저장할 테이블을 먼저 정의합니다.
+
+이 테이블은 실제 데이터를 저장하며, Distributed 테이블에서 데이터를 분배할 대상으로 사용됩니다.
+
+
+예시:
+
+CREATE TABLE example_table
+(
+    id Int32,
+    name String
+)
+ENGINE = MergeTree()
+ORDER BY id;
+
+
+2. Distributed 테이블 생성:
+
+이후, Distributed 테이블을 생성하여 여러 서버에 데이터를 분배합니다.
+
+Distributed 테이블은 기본 테이블을 참조하여 데이터를 분배하며, cluster_name과 분배할 테이블의 이름을 지정해야 합니다.
+
+
+예시:
+
+CREATE TABLE example_table_distributed
+(
+    id Int32,
+    name String
+)
+ENGINE = Distributed('cluster_name', 'default', 'example_table', rand());
+
+
+
+왜 기본 테이블을 먼저 만들어야 하나?
+
+Distributed 테이블은 다른 테이블을 참조하여 분배하는 방식이기 때문에, 참조할 대상 테이블이 먼저 존재해야 합니다. 즉, example_table이 먼저 만들어져야 Distributed 테이블에서 이를 참조할 수 있습니다.
+
+Distributed 테이블은 단지 쿼리를 분배하는 역할을 하며, 실제 데이터를 저장하지 않습니다. 따라서, 기본 테이블이 데이터 저장소 역할을 하며, 분산된 서버에서 데이터를 처리할 수 있게 됩니다.
+
+
+결론:
+
+먼저 기본 테이블을 생성한 후, 그 테이블을 참조하는 Distributed 테이블을 생성하는 순서로 진행해야 합니다.
+
+기본 테이블이 먼저 존재해야 Distributed 테이블이 데이터를 분배할 수 있기 때문에, 순서를 지켜야 합니다.
+
+
