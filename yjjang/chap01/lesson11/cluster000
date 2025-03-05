@@ -1,0 +1,170 @@
+
+샤드를 두 개로 나누었는데도 각 서버(A, B)에 동일한 데이터가 저장되는 문제가 있다면,
+샤딩이 제대로 적용되지 않았거나, INSERT가 중복 실행되고 있을 가능성이 커.
+
+
+---
+
+✅ 1. data_distributed 테이블이 올바르게 설정되었는지 확인
+
+각 서버(A, B)에서 실행해서 Distributed 테이블이 올바르게 data_local을 참조하는지 확인해봐.
+
+SHOW CREATE TABLE default.data_distributed;
+
+✅ 정상적인 경우 (data_local을 참조해야 함)
+
+CREATE TABLE default.data_distributed AS default.data_local
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+→ rand() 함수 덕분에 데이터가 A 또는 B 서버 중 하나로 분산 저장됨.
+
+
+❌ 잘못된 경우 (data_distributed가 자기 자신을 참조하는 경우)
+
+CREATE TABLE default.data_distributed AS default.data_distributed
+ENGINE = Distributed(my_cluster, default, data_distributed, rand());
+
+이렇게 설정되면 무한 루프 발생 → 각 서버에서 동일한 데이터가 INSERT됨.
+
+해결 방법: data_distributed 테이블을 삭제 후 다시 생성
+
+
+DROP TABLE IF EXISTS default.data_distributed;
+
+CREATE TABLE default.data_distributed AS default.data_local
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+
+
+---
+
+✅ 2. 샤드 설정이 올바르게 되어 있는지 확인 (remote_servers)
+
+각 서버(A, B)에서 /etc/clickhouse-server/config.xml을 열어서 확인해야 해.
+
+🔹 샤드가 각각 다른 서버로 나뉘었는지 확인 (각 서버에서 동일해야 함)
+
+<remote_servers>
+    <my_cluster>
+        <shard>  
+            <replica>
+                <host>A서버_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+        <shard>  
+            <replica>
+                <host>B서버_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+    </my_cluster>
+</remote_servers>
+
+✅ 올바른 설정
+
+A 서버와 B 서버가 각각 다른 샤드에 속해야 함.
+
+<shard> 블록이 2개 있어야 함.
+
+
+❌ 잘못된 설정 (샤드가 하나뿐임 → 복제처럼 동작)
+
+<remote_servers>
+    <my_cluster>
+        <shard>  
+            <replica>
+                <host>A서버_IP</host>
+                <port>9000</port>
+            </replica>
+            <replica>
+                <host>B서버_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+    </my_cluster>
+</remote_servers>
+
+> 이렇게 설정하면 샤드가 하나이므로 데이터가 A, B 서버에 동일하게 저장됨!
+→ 각 서버에 데이터가 중복 저장되므로 샤드를 나눠야 함.
+
+
+
+✅ 설정 변경 후 ClickHouse 재시작 필수
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+✅ 3. INSERT 실행 기록 확인 (system.query_log)
+
+ClickHouse의 system.query_log를 조회해서 INSERT가 중복 실행된 것인지 확인해야 해.
+
+🔹 각 서버(A, B)에서 실행
+
+SELECT query, query_start_time, user FROM system.query_log
+WHERE query LIKE 'INSERT%' AND event_date = today()
+ORDER BY query_start_time DESC
+LIMIT 10;
+
+✅ 정상적인 경우
+
+A 서버에서 INSERT 실행 → 데이터가 B 서버로만 분산됨.
+
+B 서버에서는 직접 INSERT가 실행되지 않음.
+
+
+❌ 잘못된 경우
+
+A 서버에서 INSERT 실행 후 B 서버에서도 동일한 INSERT 실행됨.
+
+애플리케이션이 각 서버에 직접 INSERT를 실행하고 있을 가능성이 있음.
+
+
+🔹 해결 방법
+
+1. 애플리케이션이 A 서버에서만 INSERT를 실행하도록 변경.
+
+
+2. INSERT INTO default.data_distributed만 실행해야 하며, data_local에 직접 INSERT하면 안 됨.
+
+
+
+
+---
+
+✅ 4. SELECT로 샤딩이 잘 적용되었는지 확인
+
+A 서버에서 실행:
+
+INSERT INTO default.data_distributed SELECT number, toString(number) FROM numbers(10);
+
+그런 다음, 각 서버에서 data_local을 조회해보자.
+
+🔹 A 서버에서 실행
+
+SELECT * FROM default.data_local;
+
+🔹 B 서버에서 실행
+
+SELECT * FROM default.data_local;
+
+✅ 정상적인 경우
+
+A, B 서버의 data_local 테이블에 데이터가 분산 저장됨 (일부 데이터는 A, 일부는 B).
+
+
+❌ 잘못된 경우
+
+A 서버와 B 서버의 data_local 테이블에 동일한 데이터가 저장됨 → Distributed 엔진 설정이 잘못됨.
+
+
+
+---
+
+🎯 최종 점검 리스트
+
+이제 위 내용을 하나씩 체크하면서 다시 테스트해봐!
+문제가 계속되면 추가 정보를 공유해줘. 😊
+
