@@ -1,0 +1,258 @@
+
+Ubuntu 서버 두 대(A 서버, B 서버)에 ClickHouse를 설치하고 클러스터링하여 데이터를 분산 저장하는 방법을 단계별로 설명할게.
+
+
+---
+
+1. ClickHouse 설치 (A 서버, B 서버)
+
+각 서버에서 다음 명령어를 실행하여 ClickHouse를 설치한다.
+
+sudo apt-get update
+sudo apt-get install -y clickhouse-server clickhouse-client
+
+설치 후 ClickHouse 서버를 시작한다.
+
+sudo systemctl start clickhouse-server
+sudo systemctl enable clickhouse-server
+
+
+---
+
+2. 클러스터 설정 (A 서버, B 서버 공통)
+
+ClickHouse 설정 파일을 수정하여 클러스터를 구성한다.
+
+설정 파일 편집:
+
+sudo nano /etc/clickhouse-server/config.xml
+
+아래와 같이 <remote_servers> 설정을 추가한다.
+
+<remote_servers>
+    <my_cluster>
+        <shard>
+            <replica>
+                <host>A서버_IP</host>
+                <port>9000</port>
+            </replica>
+            <replica>
+                <host>B서버_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+    </my_cluster>
+</remote_servers>
+
+설정 적용을 위해 ClickHouse를 재시작한다.
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+3. 클러스터 데이터베이스 및 테이블 생성
+
+각 서버에서 동일한 분산 테이블을 생성해야 한다.
+
+ClickHouse 클라이언트 접속:
+
+clickhouse-client -h localhost
+
+① 샤드 테이블 (각 서버에서 실행)
+
+각 서버에 로컬 테이블을 생성한다.
+
+CREATE TABLE default.data_local ON CLUSTER my_cluster (
+    id UInt32,
+    value String
+) ENGINE = MergeTree()
+ORDER BY id;
+
+② 분산 테이블 (각 서버에서 실행)
+
+이제 분산 테이블을 생성한다.
+
+CREATE TABLE default.data_distributed ON CLUSTER my_cluster AS default.data_local
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+
+
+---
+
+4. 데이터 분산 적재 테스트
+
+데이터를 data_distributed 테이블에 삽입하면, 자동으로 두 서버에 분산된다.
+
+예제 데이터 삽입:
+
+INSERT INTO default.data_distributed VALUES (1, 'A'), (2, 'B'), (3, 'C');
+
+데이터 확인:
+
+SELECT * FROM default.data_distributed;
+
+
+---
+
+5. 클러스터 확인
+
+클러스터에 속한 노드 상태를 확인한다.
+
+SELECT * FROM system.clusters WHERE cluster='my_cluster';
+
+
+---
+
+이제 ClickHouse 클러스터가 구성되었으며, data_distributed 테이블을 통해 데이터가 A, B 서버로 분산 저장된다.
+추가 설정이 필요하면 알려줘! 😊
+
+
+
+Distributed 테이블이 제대로 분산되지 않고 각 노드(A, B)에 동일한 데이터가 들어가는 문제는 보통 다음과 같은 원인 때문이야.
+
+
+---
+
+🔍 원인 및 해결 방법
+
+🚨 1. Distributed 테이블이 로컬 테이블을 가리키는지 확인
+
+각 서버(A, B)에서 data_distributed 테이블이 올바른 data_local 테이블을 참조하고 있는지 확인해야 해.
+
+🔹 확인 방법 (SHOW CREATE TABLE 실행)
+각 서버에서 실행하여 data_distributed 테이블이 data_local을 가리키는지 확인:
+
+SHOW CREATE TABLE default.data_distributed;
+
+✅ 정상적인 경우
+
+CREATE TABLE default.data_distributed AS default.data_local
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+
+❌ 잘못된 경우
+만약 data_distributed가 MergeTree 엔진으로 되어 있다면 Distributed 테이블이 아니라 로컬 테이블을 생성한 것이므로 다시 생성해야 함.
+
+
+---
+
+🚨 2. INSERT INTO를 Distributed 테이블에 했는지 확인
+
+데이터를 넣을 때 data_local이 아니라 data_distributed 테이블에 넣어야 한다.
+
+✅ 정확한 데이터 삽입 방법
+
+INSERT INTO default.data_distributed VALUES (1, 'A'), (2, 'B'), (3, 'C');
+
+❌ 잘못된 데이터 삽입 (분산되지 않음)
+
+INSERT INTO default.data_local VALUES (1, 'A'), (2, 'B'), (3, 'C');
+
+data_local에 직접 INSERT 하면 그 서버에만 데이터가 들어감.
+
+data_distributed에 INSERT 해야 ClickHouse가 데이터를 클러스터에 분산함.
+
+
+
+---
+
+🚨 3. 클러스터 설정이 올바른지 확인
+
+ClickHouse 설정 파일(/etc/clickhouse-server/config.xml)에서 클러스터가 제대로 정의되었는지 확인해야 해.
+
+🔹 설정 확인 (각 서버에서 실행)
+
+SELECT * FROM system.clusters WHERE cluster='my_cluster';
+
+✅ A, B 서버가 모두 표시되어야 함
+
+cluster    | shard_num | replica_num | host_name  | port
+--------------------------------------------------------
+my_cluster | 1        | 1           | A서버_IP   | 9000
+my_cluster | 1        | 2           | B서버_IP   | 9000
+
+❌ B 서버가 빠져 있다면?
+
+config.xml에서 <remote_servers> 설정이 올바른지 확인하고 ClickHouse를 재시작해야 함.
+
+
+<remote_servers>
+    <my_cluster>
+        <shard>
+            <replica>
+                <host>A서버_IP</host>
+                <port>9000</port>
+            </replica>
+            <replica>
+                <host>B서버_IP</host>
+                <port>9000</port>
+            </replica>
+        </shard>
+    </my_cluster>
+</remote_servers>
+
+🔹 설정 적용을 위해 ClickHouse 재시작
+
+sudo systemctl restart clickhouse-server
+
+
+---
+
+🚨 4. INSERT 시 분산 기준이 rand()인지 확인
+
+data_distributed 테이블 생성 시 rand()가 분산 기준으로 설정되었는지 확인해야 함.
+
+✅ 정확한 설정
+
+CREATE TABLE default.data_distributed AS default.data_local
+ENGINE = Distributed(my_cluster, default, data_local, rand());
+
+❌ 잘못된 설정 (분산되지 않음)
+
+ENGINE = Distributed(my_cluster, default, data_local, id);
+
+id 값이 특정 노드로만 가도록 고정되면 분산되지 않을 수 있음.
+
+
+
+---
+
+🚨 5. 데이터를 data_local에서 조회하지 않았는지 확인
+
+데이터 조회 시 data_local에서 직접 조회하면 분산 효과를 볼 수 없음.
+
+✅ 클러스터 전체 데이터 조회
+
+SELECT * FROM default.data_distributed;
+
+❌ 잘못된 조회 (로컬 테이블에서만 확인됨)
+
+SELECT * FROM default.data_local;
+
+data_local은 각 서버의 로컬 데이터만 보여줌.
+
+data_distributed에서 조회해야 A, B 서버에 분산된 데이터를 볼 수 있음.
+
+
+
+---
+
+✅ 최종 점검 리스트
+
+1. data_distributed 테이블이 Distributed 엔진인지 SHOW CREATE TABLE로 확인 ✅
+
+
+2. INSERT INTO default.data_distributed로 데이터를 넣었는지 확인 ✅
+
+
+3. system.clusters에서 A, B 서버가 정상적으로 등록되었는지 확인 ✅
+
+
+4. data_distributed 테이블이 rand()를 사용하여 데이터를 무작위로 분산하는지 확인 ✅
+
+
+5. 데이터를 data_local이 아니라 data_distributed에서 조회했는지 확인 ✅
+
+
+
+이제 다시 확인해보고도 문제가 있으면 알려줘! 😊
+
