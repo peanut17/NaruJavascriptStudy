@@ -1,0 +1,176 @@
+
+Spring Boot에서 스레드를 이용하여 Impala 쿼리 3개를 동시에 실행하는 방법을 설명해줄게.
+
+1. @Async 비동기 방식 사용 (추천)
+
+Spring Boot에서는 @Async를 활용하여 간단하게 비동기 실행이 가능해.
+
+1. @EnableAsync 설정
+
+
+2. @Async 메서드 생성
+
+
+3. CompletableFuture를 활용하여 결과를 병렬 실행
+
+
+
+설정 파일 추가
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableAsync;
+
+@Configuration
+@EnableAsync // 비동기 기능 활성화
+public class AsyncConfig {
+}
+
+Impala Query 실행하는 서비스 (비동기 메서드)
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import java.util.concurrent.CompletableFuture;
+
+@Service
+public class ImpalaQueryService {
+
+    @Async
+    public CompletableFuture<String> runQuery1() {
+        String result = executeImpalaQuery("SELECT * FROM table1 LIMIT 10");
+        return CompletableFuture.completedFuture(result);
+    }
+
+    @Async
+    public CompletableFuture<String> runQuery2() {
+        String result = executeImpalaQuery("SELECT * FROM table2 LIMIT 10");
+        return CompletableFuture.completedFuture(result);
+    }
+
+    @Async
+    public CompletableFuture<String> runQuery3() {
+        String result = executeImpalaQuery("SELECT * FROM table3 LIMIT 10");
+        return CompletableFuture.completedFuture(result);
+    }
+
+    private String executeImpalaQuery(String query) {
+        // 실제 Impala JDBC 또는 HTTP 클라이언트 코드 작성
+        try {
+            Thread.sleep(3000); // 테스트용 딜레이
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return "Result for: " + query;
+    }
+}
+
+Controller에서 3개의 쿼리를 동시에 실행
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.concurrent.CompletableFuture;
+
+@RestController
+@RequestMapping("/impala")
+public class ImpalaQueryController {
+
+    private final ImpalaQueryService impalaQueryService;
+
+    public ImpalaQueryController(ImpalaQueryService impalaQueryService) {
+        this.impalaQueryService = impalaQueryService;
+    }
+
+    @GetMapping("/run")
+    public String runQueries() {
+        CompletableFuture<String> query1 = impalaQueryService.runQuery1();
+        CompletableFuture<String> query2 = impalaQueryService.runQuery2();
+        CompletableFuture<String> query3 = impalaQueryService.runQuery3();
+
+        CompletableFuture.allOf(query1, query2, query3).join();
+
+        return query1.join() + "\n" + query2.join() + "\n" + query3.join();
+    }
+}
+
+
+---
+
+2. ExecutorService 활용 (스레드풀 관리 가능)
+
+Spring Boot에서 ExecutorService를 이용하면 직접 스레드를 관리할 수도 있어.
+
+Impala Query 실행하는 서비스
+
+import org.springframework.stereotype.Service;
+import java.util.concurrent.*;
+
+@Service
+public class ImpalaQueryService {
+
+    private final ExecutorService executorService = Executors.newFixedThreadPool(3);
+
+    public String runQuery(String query) {
+        Callable<String> task = () -> executeImpalaQuery(query);
+        Future<String> future = executorService.submit(task);
+        try {
+            return future.get(); // 블로킹 방식으로 결과 가져오기
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            return "Error executing query";
+        }
+    }
+
+    private String executeImpalaQuery(String query) {
+        // 실제 Impala JDBC 실행 코드 작성
+        try {
+            Thread.sleep(3000); // 테스트용 딜레이
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return "Result for: " + query;
+    }
+}
+
+Controller에서 3개의 쿼리를 병렬 실행
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.concurrent.CompletableFuture;
+
+@RestController
+@RequestMapping("/impala")
+public class ImpalaQueryController {
+
+    private final ImpalaQueryService impalaQueryService;
+
+    public ImpalaQueryController(ImpalaQueryService impalaQueryService) {
+        this.impalaQueryService = impalaQueryService;
+    }
+
+    @GetMapping("/run")
+    public String runQueries() {
+        CompletableFuture<String> query1 = CompletableFuture.supplyAsync(() -> impalaQueryService.runQuery("SELECT * FROM table1 LIMIT 10"));
+        CompletableFuture<String> query2 = CompletableFuture.supplyAsync(() -> impalaQueryService.runQuery("SELECT * FROM table2 LIMIT 10"));
+        CompletableFuture<String> query3 = CompletableFuture.supplyAsync(() -> impalaQueryService.runQuery("SELECT * FROM table3 LIMIT 10"));
+
+        CompletableFuture.allOf(query1, query2, query3).join();
+
+        return query1.join() + "\n" + query2.join() + "\n" + query3.join();
+    }
+}
+
+
+---
+
+정리
+
+비동기 실행 (추천) → @Async와 CompletableFuture를 활용하면 간결하게 구현 가능
+
+ExecutorService 활용 → 직접 스레드를 관리할 수 있으며 유연한 방식
+
+
+실제 Impala JDBC 코드가 필요하면 말해줘!
+Impala와 연동해서 실행하는 코드도 추가해줄게.
+
