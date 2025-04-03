@@ -28,3 +28,16 @@ def collectTableField(self, partition):
     return filtered_tables
 이렇게 하면 필터링된 테이블이 하나씩 Selected Table: table_name 형태로 출력될 거야.
 더 많은 정보가 필요하면 print(row)를 추가해서 전체 행을 출력하는 것도 가능해! 
+
+
+
+
+def _getTableNames(self, df):
+    tableNames = df.select('table').rdd.mapPartitions(self.collectTableField).distinct()
+    
+    # 테이블 출력
+    for table in tableNames.collect():
+        print(f"Selected Table: {table}")
+
+    return tableNames.collect()
+
