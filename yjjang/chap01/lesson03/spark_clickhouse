@@ -1,0 +1,124 @@
+
+Kafka의 "test-topic" 데이터를 PySpark를 사용하여 ClickHouse로 적재하는 코드를 작성해 줄게요.
+
+구현 흐름
+
+1. Kafka에서 데이터 읽기: PySpark의 readStream을 사용하여 Kafka 데이터를 스트리밍으로 가져옴.
+
+
+2. JSON 파싱: Kafka의 메시지를 JSON 형식으로 변환.
+
+
+3. ClickHouse로 적재: PySpark DataFrame을 ClickHouse 테이블로 적재.
+
+
+
+사전 준비
+
+ClickHouse JDBC 드라이버 다운로드
+
+wget https://repo1.maven.org/maven2/cc/blynk/clickhouse/clickhouse-jdbc/0.3.2/clickhouse-jdbc-0.3.2.jar -P $SPARK_HOME/jars/
+
+PySpark 실행 시 추가 옵션 사용
+
+spark-submit --jars $SPARK_HOME/jars/clickhouse-jdbc-0.3.2.jar script.py
+
+
+
+---
+
+Kafka → PySpark → ClickHouse 코드
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json
+from pyspark.sql.types import StructType, StringType, IntegerType
+from pyspark.sql.streaming import DataStreamWriter
+
+# SparkSession 생성
+spark = SparkSession.builder \
+    .appName("KafkaToClickHouse") \
+    .config("spark.jars", "/path/to/clickhouse-jdbc-0.3.2.jar") \
+    .getOrCreate()
+
+# Kafka에서 데이터 읽기
+kafka_bootstrap_servers = "localhost:9092"
+kafka_topic = "test-topic"
+
+raw_stream_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", kafka_bootstrap_servers) \
+    .option("subscribe", kafka_topic) \
+    .option("startingOffsets", "earliest") \
+    .load()
+
+# JSON 파싱을 위한 스키마 정의
+schema = StructType() \
+    .add("id", IntegerType()) \
+    .add("name", StringType()) \
+    .add("value", IntegerType())
+
+# Kafka 메시지를 JSON 형식으로 변환
+parsed_df = raw_stream_df.selectExpr("CAST(value AS STRING)") \
+    .select(from_json(col("value"), schema).alias("data")) \
+    .select("data.*")
+
+# ClickHouse 연결 정보
+clickhouse_url = "jdbc:clickhouse://localhost:8123/default"
+clickhouse_table = "test_table"
+clickhouse_properties = {
+    "driver": "cc.blynk.clickhouse.ClickHouseDriver",
+    "user": "default",
+    "password": ""
+}
+
+# ClickHouse로 데이터 적재 (Batch 방식)
+def write_to_clickhouse(batch_df, batch_id):
+    batch_df.write \
+        .format("jdbc") \
+        .option("url", clickhouse_url) \
+        .option("dbtable", clickhouse_table) \
+        .option("user", clickhouse_properties["user"]) \
+        .option("password", clickhouse_properties["password"]) \
+        .option("driver", clickhouse_properties["driver"]) \
+        .mode("append") \
+        .save()
+
+# 스트리밍 데이터를 ClickHouse로 쓰기
+query = parsed_df.writeStream \
+    .foreachBatch(write_to_clickhouse) \
+    .outputMode("update") \
+    .start()
+
+query.awaitTermination()
+
+
+---
+
+ClickHouse 테이블 생성 예시
+
+PySpark에서 적재하려는 ClickHouse 테이블을 미리 만들어야 합니다.
+
+CREATE TABLE test_table (
+    id Int32,
+    name String,
+    value Int32
+) ENGINE = MergeTree()
+ORDER BY id;
+
+설명
+
+1. Kafka에서 데이터를 읽음 (readStream)
+
+
+2. JSON 파싱 (from_json)
+
+
+3. Batch 방식으로 ClickHouse 적재 (foreachBatch)
+
+
+4. 스트리밍 지속 실행 (query.awaitTermination())
+
+
+
+이렇게 하면 Kafka의 test-topic 데이터를 실시간으로 ClickHouse로 적재할 수 있습니다! 🚀
+
