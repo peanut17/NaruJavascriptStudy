@@ -1,0 +1,30 @@
+필요한 테이블만 필터링하려면 if 문을 사용하여 원하는 테이블만 리스트에 포함시키면 돼. 예를 들어, 특정 테이블 목록을 allowed_tables에 저장하고 필터링하는 방식으로 구현할 수 있어.
+
+python
+복사
+편집
+def collectTableField(self, partition):
+    allowed_tables = {"table1", "table2", "table3"}  # 필요한 테이블 목록
+    return [row['table'] for row in partition if row['table'] in allowed_tables]
+이렇게 하면 allowed_tables에 포함된 테이블만 리스트에 추가될 거야.
+필요한 테이블 목록을 동적으로 가져와야 한다면, 외부 설정 파일이나 데이터베이스에서 읽어오는 방식도 고려할 수 있어. 😊
+
+
+
+
+ChatGPT의 말:
+필터링된 테이블을 출력하는 print 코드를 추가하면 아래와 같이 작성할 수 있어:
+
+python
+복사
+편집
+def collectTableField(self, partition):
+    allowed_tables = {"table1", "table2", "table3"}  # 필요한 테이블 목록
+    filtered_tables = [row['table'] for row in partition if row['table'] in allowed_tables]
+
+    for table in filtered_tables:
+        print(f"Selected Table: {table}")
+
+    return filtered_tables
+이렇게 하면 필터링된 테이블이 하나씩 Selected Table: table_name 형태로 출력될 거야.
+더 많은 정보가 필요하면 print(row)를 추가해서 전체 행을 출력하는 것도 가능해! 
