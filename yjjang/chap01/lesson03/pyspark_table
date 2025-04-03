@@ -40,4 +40,30 @@ def _getTableNames(self, df):
         print(f"Selected Table: {table}")
 
     return tableNames.collect()
+-----
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+name = "Alice"
+age = 25
+
+logging.info(f"User {name} is {age} years old.")
+
+-----
+
+logging.info("User %(name)s is %(age)d years old.", {"name": name, "age": age})
+
+
+-----
+name = "Alice"
+age = 25
+
+print(f"Hello, my name is {name} and I am {age} years old.")
+
+
+------
+def hello():
+    print("Hello")  # 스페이스(공백) 사용
+	print("World")  # 탭 사용 (잘못된 부분)
