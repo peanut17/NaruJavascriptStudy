@@ -62,8 +62,12 @@ age = 25
 
 print(f"Hello, my name is {name} and I am {age} years old.")
 
+-------
 
-------
-def hello():
-    print("Hello")  # 스페이스(공백) 사용
-	print("World")  # 탭 사용 (잘못된 부분)
+
+from pyspark.sql.functions import col
+
+valid_tables = ["payload", "nopayload", "event", "log", "error", "click", "view", "user", "metric", "summary", "trace", "debug"]
+
+# 필터링: table 컬럼의 값이 리스트에 포함된 것만 남김
+filtered_df = df.filter(col("table").isin(valid_tables))
