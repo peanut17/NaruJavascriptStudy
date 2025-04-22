@@ -1,0 +1,222 @@
+A안] systemctl 명령을 sudo 없이 사용하게 설정
+목표: 일반 사용자가 clickhouse-server 서비스 시작/정지/재시작 가능
+
+# root에서 아래 명령 실행
+sudo visudo
+
+# 맨 아래에 다음 내용 추가 (예: user 이름이 yjjang일 경우)
+yjjang ALL=NOPASSWD: /bin/systemctl start clickhouse-server.service
+yjjang ALL=NOPASSWD: /bin/systemctl stop clickhouse-server.service
+yjjang ALL=NOPASSWD: /bin/systemctl restart clickhouse-server.service
+
+이제 일반 사용자로 전환 후 아래 명령으로 실행 가능:
+sudo /bin/systemctl start clickhouse-server.service
+
+
+2. 설정 파일 수정 권한 부여
+ClickHouse 주요 설정 파일:
+
+파일	위치
+config.xml	/etc/clickhouse-server/config.xml
+users.xml	/etc/clickhouse-server/users.xml
+
+기본은 root만 수정 가능하므로 권한을 부여해야 합니다.
+# root로 실행
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+w /etc/clickhouse-server
+sudo usermod -aG clickhouse yjjang
+🔁 시스템 재로그인 후 적용됨 (groups 명령으로 그룹 포함 여부 확인 가능)
+
+
+3. 데이터 디렉토리 접근 권한
+ClickHouse는 /var/lib/clickhouse 등에 데이터를 저장함
+
+sudo chown -R clickhouse:clickhouse /var/lib/clickhouse
+sudo chmod -R 770 /var/lib/clickhouse
+사용자가 clickhouse 그룹에 포함돼 있다면 접근 가능
+
+--------------------------------------------
+수정해서 다시 실행해보세요
+
+sudo /bin/systemctl start clickhouse-server.service
+혹은 /bin 생략하고 일반적으로도 잘 동작합니다:
+
+sudo systemctl start clickhouse-server.service
+
+
+참고: 서비스가 제대로 등록되어 있는지 확인하려면
+
+systemctl status clickhouse-server.service
+혹은 모든 유닛 중에 clickhouse 관련된 것 검색:
+
+systemctl list-units --type=service | grep clickhouse
+
+----------------------------------------------
+. 사용자 계정의 그룹 적용 여부 확인
+usermod -aG clickhouse yjjang을 하셨으면 로그아웃 후 재로그인이 필요합니다.
+안 하면 clickhouse 그룹이 적용되지 않아서 권한이 안 먹어요.
+
+확인:
+groups
+출력에 clickhouse가 있어야 합니다:
+
+yaml
+yjjang : yjjang sudo clickhouse
+
+
+2. 디렉터리 권한 및 퍼미션 재확인
+현재 권한 상태 확인:
+
+ls -ld /etc/clickhouse-server
+정상적이라면 이런 식이어야 합니다:
+drwxrwx---  4 root clickhouse 4096 Apr 22 12:00 /etc/clickhouse-server
+
+만약 권한이 rwx가 아니라면 수정해주세요:
+sudo chmod 770 /etc/clickhouse-server
+
+하위까지 포함해 접근되게 하려면:
+sudo chmod -R g+rx /etc/clickhouse-server
+
+
+3. 해당 디렉터리에 있는 하위 파일/디렉터리의 소유권까지 확인
+하위 파일도 잘못된 퍼미션으로 되어 있을 수 있습니다.
+
+find /etc/clickhouse-server ! -group clickhouse
+
+→ 출력되는 파일이 있다면 chgrp가 완전히 안 먹은 것 → 다음 명령으로 다시 적용:
+
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+rwX /etc/clickhouse-server
+rwX는 디렉터리면 실행권한, 파일이면 읽기/쓰기만 줍니다 (안전하게 적용됨)
+
+4. 테스트: 권한이 잘 먹었는지 확인
+cd /etc/clickhouse-server
+cat config.xml
+위 명령이 Permission denied 없이 잘 실행되면 성공입니다.
+
+5. 마무리 체크리스트
+
+항목	확인 여부
+clickhouse 그룹에 포함됐는가 (groups)	✅
+/etc/clickhouse-server 권한이 770 이상인가	✅
+하위 파일 소유 그룹도 clickhouse인가	✅
+재로그인 또는 newgrp clickhouse 했는가
+
+혹시 재로그인이 어려운 상황이라면:
+newgrp clickhouse
+----------------------------------------------
+
+
+1. 현재 퍼미션 직접 확인
+
+ls -ld /etc/clickhouse-server
+출력 예시는 다음처럼 나와야 정상입니다:
+
+
+drwxrwx---  4 root clickhouse 4096 Apr 22 13:45 /etc/clickhouse-server
+퍼미션은 rwxrwx---
+
+그룹은 clickhouse
+
+소유자는 보통 root여도 상관없습니다 (중요한 건 그룹)
+
+
+2. 퍼미션 수정 (디렉토리 접근 불가일 경우)
+접근이 안 된다면, 다음 명령으로 권한 보정:
+
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+rwX /etc/clickhouse-server
+g+rwX는 디렉토리에는 x, 파일에는 rw 권한을 그룹에 부여합니다.
+
+3. 다시 시도
+cd /etc/clickhouse-server
+또는 테스트로 파일 하나 읽어보기:
+
+cat /etc/clickhouse-server/config.xml
+
+4. 그래도 안 된다면?
+혹시 부모 디렉토리 중 하나가 막혀 있는지도 확인해보세요:
+
+ls -ld /etc
+이것도 최소한 실행(x) 권한이 있어야 하므로 drwxr-xr-x 이상이 되어야 합니다.
+
+----------------------------------------------
+
+아래 이 내용을 보시면 바로 알 수 있어요:
+
+drwx-w---- 4 clickhouse clickhouse 4096 Mar 18 12:37 /etc/clickhouse-server
+이 디렉토리는 현재 퍼미션이 drwx-w----, 즉:
+
+읽기(r) 권한 ❌ 없음
+
+쓰기(w) 권한 ✅ 있음
+
+실행(x) 권한 ❌ 없음 (→ 디렉터리 접근 불가)
+
+
+디렉토리에 x(execute) 권한이 없으면 cd가 불가능합니다!
+
+해결 방법
+x 권한을 그룹에 추가해줍니다:
+
+sudo chmod g+x /etc/clickhouse-server
+그러면 퍼미션이 이렇게 바뀝니다:
+
+drwxrwx--- 4 clickhouse clickhouse 4096 Mar 18 12:37 /etc/clickhouse-server
+이후 다시 시도:
+
+cd /etc/clickhouse-server
+
+추가로: 전체 하위 경로에도 권한 일괄 부여 (안전하게)
+
+sudo chmod -R g+rwX /etc/clickhouse-server
+g+rwX는 디렉토리에는 x, 파일에는 rw를 줘서 안전하게 퍼미션 정리합니다.
+
+
+----------------------------------------------
+
+clickhouse-client 명령어에서 "sudo password is required" 메시지가 나오는 이유는 크게 2가지 가능성이 있습니다:
+
+✅ 1. clickhouse-client 자체가 sudo로 실행되도록 alias 또는 설정된 경우
+우선 아래 명령으로 확인해보세요:
+type clickhouse-client
+
+정상이라면:
+clickhouse-client is /usr/bin/clickhouse-client
+
+비정상 예시 (원인):
+clickhouse-client is aliased to `sudo /usr/bin/clickhouse-client`
+
+해결 방법
+만약 alias 되어 있다면:
+unalias clickhouse-client
+
+그리고 .bashrc 또는 .zshrc 등 쉘 설정 파일에 아래 줄이 있다면 삭제하세요:
+alias clickhouse-client='sudo /usr/bin/clickhouse-client'
+
+삭제 후:
+source ~/.bashrc  # or ~/.zshrc
+
+
+
+2. /usr/bin/clickhouse-client 바이너리 자체가 root 권한이 필요하도록 설정된 경우
+이건 드물지만 가능성 있습니다. 확인해보세요:
+
+ls -l /usr/bin/clickhouse-client
+출력 예시:
+-rwxr-xr-x 1 root root 9000000 Apr 15 10:00 /usr/bin/clickhouse-client
+이건 정상입니다.
+
+⚠ 반면에 만약 -rwsr-xr-x 처럼 setuid(s) 비트가 있거나, 소유자가 이상하게 되어 있다면 수정이 필요할 수 있습니다.
+
+🔧 권한 수정 예시
+sudo chown root:root /usr/bin/clickhouse-client
+sudo chmod 755 /usr/bin/clickhouse-client
+그 후, 일반 사용자로 실행:
+
+clickhouse-client
+
+
+
+
+
