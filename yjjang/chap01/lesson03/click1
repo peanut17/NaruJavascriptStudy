@@ -1,0 +1,314 @@
+
+폐쇄망(오프라인) 우분투 서버에서 root 없이 clickhouse-server를 새로운 사용자 계정으로 실행하고 설정까지 제어할 수 있게 하려면, 다음과 같은 절차로 구성하면 됩니다.
+
+
+---
+
+✅ 1. clickhouse 사용자 권한 위임 방식
+
+root가 아닌 일반 사용자로 ClickHouse를 실행하기 위해 다음 두 가지 중 하나를 선택합니다:
+
+✅ [A안] systemctl 명령을 sudo 없이 사용하게 설정
+
+목표: 일반 사용자가 clickhouse-server 서비스 시작/정지/재시작 가능
+
+# root에서 아래 명령 실행
+sudo visudo
+
+# 맨 아래에 다음 내용 추가 (예: user 이름이 yjjang일 경우)
+yjjang ALL=NOPASSWD: /bin/systemctl start clickhouse-server.service
+yjjang ALL=NOPASSWD: /bin/systemctl stop clickhouse-server.service
+yjjang ALL=NOPASSWD: /bin/systemctl restart clickhouse-server.service
+
+이제 일반 사용자로 전환 후 아래 명령으로 실행 가능:
+
+sudo /bin/systemctl start clickhouse-server.service
+
+
+---
+
+✅ [B안] ClickHouse를 systemd 서비스가 아닌 수동 백그라운드 실행으로 전환
+
+ClickHouse는 바이너리로 직접 실행도 가능합니다:
+
+/app/clickhouse/bin/clickhouse server --config-file=/etc/clickhouse-server/config.xml
+
+단, 포그라운드 실행이라 터미널 유지 필요 → tmux, nohup, &, systemd user unit 등 활용 필요
+
+
+예:
+
+nohup /app/clickhouse/bin/clickhouse server --config=/etc/clickhouse-server/config.xml > /var/log/clickhouse/clickhouse.log 2>&1 &
+
+
+---
+
+✅ 2. 설정 파일 수정 권한 부여
+
+ClickHouse 주요 설정 파일:
+
+기본은 root만 수정 가능하므로 권한을 부여해야 합니다.
+
+# root로 실행
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+w /etc/clickhouse-server
+sudo usermod -aG clickhouse yjjang
+
+> 🔁 시스템 재로그인 후 적용됨 (groups 명령으로 그룹 포함 여부 확인 가능)
+
+
+
+
+---
+
+✅ 3. 데이터 디렉토리 접근 권한
+
+ClickHouse는 /var/lib/clickhouse 등에 데이터를 저장함
+
+sudo chown -R clickhouse:clickhouse /var/lib/clickhouse
+sudo chmod -R 770 /var/lib/clickhouse
+
+사용자가 clickhouse 그룹에 포함돼 있다면 접근 가능
+
+
+---
+
+✅ 4. (선택) systemd user unit 등록 (전용 서비스처럼 실행하고 싶다면)
+
+mkdir -p ~/.config/systemd/user
+nano ~/.config/systemd/user/clickhouse-server.service
+
+[Unit]
+Description=ClickHouse Server
+
+[Service]
+ExecStart=/app/clickhouse/bin/clickhouse server --config=/etc/clickhouse-server/config.xml
+Restart=always
+
+[Install]
+WantedBy=default.target
+
+실행 방법:
+
+systemctl --user daemon-reexec
+systemctl --user start clickhouse-server
+systemctl --user enable clickhouse-server
+
+> ⚠ 이 기능은 일반 사용자의 systemd --user가 활성화돼 있어야 합니다. 시스템에 따라 제한될 수 있음.
+
+
+
+
+---
+
+📌 정리
+
+
+---
+
+원하는 방식이 A안인지 B안인지 알려주시면 맞춤으로 더 구체화해드릴 수 있어요.
+
+
+
+오타가 원인입니다! 😅
+에러 메시지를 보면:
+
+Failed to stop **clichkouse-server.service**: Unit clichkouse-server.service not loaded.
+
+clickhouse-server.service → **clichkouse**-server.service 로 잘못 입력되어 있습니다.
+
+
+---
+
+✅ 수정해서 다시 실행해보세요
+
+sudo /bin/systemctl start clickhouse-server.service
+
+혹은 /bin 생략하고 일반적으로도 잘 동작합니다:
+
+sudo systemctl start clickhouse-server.service
+
+
+---
+
+🔍 참고: 서비스가 제대로 등록되어 있는지 확인하려면
+
+systemctl status clickhouse-server.service
+
+혹은 모든 유닛 중에 clickhouse 관련된 것 검색:
+
+systemctl list-units --type=service | grep clickhouse
+
+
+---
+
+필요하시면 sudo 없이 systemctl 명령을 더 다양하게 추가해드릴 수도 있습니다.
+혹시 아직 안 되는 게 있다면 알려주세요!
+
+
+
+
+
+
+좋습니다, 설정 거의 잘 하셨고 이제 마무리로 몇 가지 확인 + 조치만 더 해주시면 됩니다. 아래 순서대로 체크해보세요.
+
+
+---
+
+✅ 1. 사용자 계정의 그룹 적용 여부 확인
+
+usermod -aG clickhouse yjjang을 하셨으면 로그아웃 후 재로그인이 필요합니다.
+안 하면 clickhouse 그룹이 적용되지 않아서 권한이 안 먹어요.
+
+확인:
+
+groups
+
+출력에 clickhouse가 있어야 합니다:
+
+yjjang : yjjang sudo clickhouse
+
+
+---
+
+✅ 2. 디렉터리 권한 및 퍼미션 재확인
+
+현재 권한 상태 확인:
+
+ls -ld /etc/clickhouse-server
+
+정상적이라면 이런 식이어야 합니다:
+
+drwxrwx---  4 root clickhouse 4096 Apr 22 12:00 /etc/clickhouse-server
+
+만약 권한이 rwx가 아니라면 수정해주세요:
+
+sudo chmod 770 /etc/clickhouse-server
+
+하위까지 포함해 접근되게 하려면:
+
+sudo chmod -R g+rx /etc/clickhouse-server
+
+
+---
+
+✅ 3. 해당 디렉터리에 있는 하위 파일/디렉터리의 소유권까지 확인
+
+하위 파일도 잘못된 퍼미션으로 되어 있을 수 있습니다.
+
+find /etc/clickhouse-server ! -group clickhouse
+
+→ 출력되는 파일이 있다면 chgrp가 완전히 안 먹은 것 → 다음 명령으로 다시 적용:
+
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+rwX /etc/clickhouse-server
+
+rwX는 디렉터리면 실행권한, 파일이면 읽기/쓰기만 줍니다 (안전하게 적용됨)
+
+
+---
+
+✅ 4. 테스트: 권한이 잘 먹었는지 확인
+
+cd /etc/clickhouse-server
+cat config.xml
+
+위 명령이 Permission denied 없이 잘 실행되면 성공입니다.
+
+
+---
+
+✅ 마무리 체크리스트
+
+
+---
+
+혹시 재로그인이 어려운 상황이라면:
+
+newgrp clickhouse
+
+를 입력하면 현재 터미널 세션에 한해 바로 그룹이 적용됩니다.
+
+
+---
+
+필요하면 권한/보안 관점에서 좀 더 엄격하게 구성하는 방법도 알려드릴게요.
+작동되는지 확인해보고 알려줘요!
+
+
+
+
+완벽합니다! groups에 clickhouse 포함되어 있으니 사용자 계정 권한은 정상입니다.
+
+
+---
+
+그런데도 여전히 cd /etc/clickhouse-server 시 Permission denied가 발생한다면, 디렉터리 또는 하위 파일의 실제 퍼미션 문제일 가능성이 높습니다. 아래 단계 따라 조치해보세요.
+
+
+---
+
+✅ 1. 현재 퍼미션 직접 확인
+
+ls -ld /etc/clickhouse-server
+
+출력 예시는 다음처럼 나와야 정상입니다:
+
+drwxrwx---  4 root clickhouse 4096 Apr 22 13:45 /etc/clickhouse-server
+
+퍼미션은 rwxrwx---
+
+그룹은 clickhouse
+
+소유자는 보통 root여도 상관없습니다 (중요한 건 그룹)
+
+
+
+---
+
+✅ 2. 퍼미션 수정 (디렉토리 접근 불가일 경우)
+
+접근이 안 된다면, 다음 명령으로 권한 보정:
+
+sudo chgrp -R clickhouse /etc/clickhouse-server
+sudo chmod -R g+rwX /etc/clickhouse-server
+
+g+rwX는 디렉토리에는 x, 파일에는 rw 권한을 그룹에 부여합니다.
+
+
+
+---
+
+✅ 3. 다시 시도
+
+cd /etc/clickhouse-server
+
+또는 테스트로 파일 하나 읽어보기:
+
+cat /etc/clickhouse-server/config.xml
+
+
+---
+
+✅ 4. 그래도 안 된다면?
+
+혹시 부모 디렉토리 중 하나가 막혀 있는지도 확인해보세요:
+
+ls -ld /etc
+
+이것도 최소한 실행(x) 권한이 있어야 하므로 drwxr-xr-x 이상이 되어야 합니다.
+
+
+---
+
+✅ 번외: 보안 모듈(예: AppArmor, SELinux) 적용 여부 확인
+
+sudo aa-status
+
+AppArmor가 clickhouse-server에 대해 제한 걸고 있을 수도 있어요 (하지만 일반적으론 해당 없음).
+
+
+---
+
+작동되면 알려주시고, 여전히 막혀 있다면 ls -ld로 나온 내용 캡쳐해주시면 빠르게 도와드릴 수 있어요.
+
