@@ -1,0 +1,107 @@
+
+좋아, Spark → ClickHouse 적재 시 UPSERT 유사 방식을 위해 CollapsingMergeTree + Materialized View + OPTIMIZE FINAL 자동화를 함께 구성하면 좋습니다.
+아래에 두 가지 모두 정리해줄게.
+
+
+---
+
+1. CollapsingMergeTree 기반 테이블 + Materialized View 구성
+
+1-1. Raw 테이블 (Kafka or Spark에서 insert)
+
+CREATE TABLE raw_events
+(
+  id UInt64,
+  name String,
+  updated_at DateTime,
+  _sign Int8  -- +1: insert, -1: delete (기존 데이터 제거용)
+) ENGINE = MergeTree
+ORDER BY id;
+
+1-2. Target 테이블 (중복 제거, 최종 데이터 유지)
+
+CREATE TABLE collapsed_events
+(
+  id UInt64,
+  name String,
+  updated_at DateTime,
+  _sign Int8
+) ENGINE = CollapsingMergeTree(_sign)
+ORDER BY id;
+
+1-3. Materialized View 설정
+
+CREATE MATERIALIZED VIEW mv_to_collapsed_events
+TO collapsed_events
+AS
+SELECT *
+FROM raw_events;
+
+작동 방식:
+
+Spark 또는 Kafka에서 raw_events에 _sign=1로 insert
+
+기존 레코드를 제거하려면 _sign=-1인 동일 id도 insert
+
+이후 ClickHouse가 collapsed_events에서 _sign 기준으로 집계하여 중복 제거
+
+
+
+---
+
+2. PySpark에서 insert 시 _sign 설정 예시
+
+from pyspark.sql.functions import lit
+
+df_upsert = spark.createDataFrame([
+    (1, "Alice", "2025-05-12 00:00:00"),
+    (2, "Bob", "2025-05-12 01:00:00")
+], ["id", "name", "updated_at"])
+
+# insert용 _sign = 1
+df_with_sign = df_upsert.withColumn("_sign", lit(1))
+
+df_with_sign.write \
+  .format("jdbc") \
+  .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+  .option("url", "jdbc:clickhouse://[폐쇄망IP]:8123/default") \
+  .option("dbtable", "raw_events") \
+  .option("user", "default") \
+  .option("password", "default") \
+  .mode("append") \
+  .save()
+
+
+---
+
+3. OPTIMIZE TABLE ... FINAL 자동화 스크립트 (cron용)
+
+#!/bin/bash
+CLICKHOUSE_CLIENT="/usr/bin/clickhouse-client"
+HOST="localhost"
+USER="default"
+PASS="default"
+
+TABLES=("collapsed_events")
+
+for TABLE in "${TABLES[@]}"; do
+  echo "Running OPTIMIZE on $TABLE"
+  $CLICKHOUSE_CLIENT --host=$HOST --user=$USER --password=$PASS \
+    --query="OPTIMIZE TABLE $TABLE FINAL;"
+done
+
+저장 후 /usr/local/bin/optimize_clickhouse.sh 등으로 권한 부여
+
+chmod +x optimize_clickhouse.sh
+
+
+crontab 예시 (매시간 실행):
+
+0 * * * * /usr/local/bin/optimize_clickhouse.sh >> /var/log/clickhouse_optimize.log 2>&1
+
+
+---
+
+필요하면 ReplacingMergeTree 방식도 함께 보여줄 수 있어.
+혹시 _sign = -1 처리를 Spark에서 자동화하고 싶다면 그 흐름도 알려줄까?
+
