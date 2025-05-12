@@ -1,0 +1,123 @@
+
+Kafka 데이터를 Spark로 처리해 ClickHouse에 **업데이트(upsert)**하는 방법은 기본적으로 ClickHouse의 특성과 제약에 따라 정확한 전략이 필요합니다. ClickHouse는 일반적으로 OLAP 성격이라 UPDATE나 UPSERT가 RDB처럼 바로 되지는 않으며, 다음 중 하나의 방법으로 구현합니다.
+
+
+---
+
+1. MergeTree + ReplacingMergeTree 또는 CollapsingMergeTree 사용
+
+ClickHouse에서 "upsert"처럼 동작시키려면 MergeTree 계열 엔진을 활용한 테이블 설계 + 머지 전략이 필요합니다.
+
+A. ReplacingMergeTree 사용 예
+
+CREATE TABLE target_table
+(
+  id UInt64,
+  name String,
+  updated_at DateTime
+) 
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY id;
+
+updated_at을 기준으로 가장 최신 레코드가 유지됨
+
+Spark에서는 그냥 .mode("append")로 insert만 하면 됨
+
+
+Spark에서 적재 예시
+
+df.write \
+  .format("jdbc") \
+  .option("url", "jdbc:clickhouse://<host>:8123/default") \
+  .option("dbtable", "target_table") \
+  .option("user", "default") \
+  .option("password", "default") \
+  .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+  .mode("append") \
+  .save()
+
+
+---
+
+2. CollapsingMergeTree 사용
+
+삭제 플래그(sign)를 이용해 이전 값을 삭제하고 새 값을 삽입하는 방식.
+
+A. 테이블 생성
+
+CREATE TABLE target_table
+(
+  id UInt64,
+  name String,
+  version DateTime,
+  sign Int8
+)
+ENGINE = CollapsingMergeTree(sign)
+ORDER BY id;
+
+B. Spark에서 insert 방식
+
+이전 데이터에 대해 sign = -1, 새 데이터에 대해 sign = 1로 2건을 삽입
+
+이후 ClickHouse가 병합 시 sign 값을 기준으로 삭제 및 최신화 수행
+
+
+
+---
+
+3. Materialized View로 UPSERT 처리 자동화
+
+Kafka 데이터를 수집하는 테이블을 Raw Table로 만들고, Materialized View를 통해 UPSERT 처리 전용 테이블로 자동 적재.
+
+예시 구성:
+
+kafka_raw : Kafka -> Spark -> Append-only 저장소
+
+target_mv : Materialized View
+
+target_table : ReplacingMergeTree 기반
+
+
+-- 실데이터 테이블
+CREATE TABLE target_table
+(
+  id UInt64,
+  name String,
+  updated_at DateTime
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY id;
+
+-- Kafka Raw 테이블
+CREATE TABLE kafka_raw
+(
+  id UInt64,
+  name String,
+  updated_at DateTime
+)
+ENGINE = MergeTree()
+ORDER BY id;
+
+-- Materialized View: UPSERT 처리
+CREATE MATERIALIZED VIEW target_mv TO target_table AS
+SELECT * FROM kafka_raw;
+
+Spark에서는 kafka_raw에 append만 하면 됩니다.
+
+
+---
+
+요약
+
+방법	테이블 엔진	특징
+
+1	ReplacingMergeTree	updated_at 기준 최신 row만 유지
+2	CollapsingMergeTree	sign 필드로 명시적 upsert (삭제+삽입)
+3	Materialized View	중간 버퍼 테이블 + MV 자동 upsert 처리
+
+
+
+---
+
+원하시는 방식 (Replacing vs Collapsing vs MV 자동화)에 따라 구체적인 Spark 코드를 도와드릴 수 있어요. 어떤 방식이 가장 맞을까요?
+
