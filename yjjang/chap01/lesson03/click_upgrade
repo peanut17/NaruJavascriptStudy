@@ -119,3 +119,63 @@ sudo rm -rf /etc/clickhouse* /var/lib/clickhouse /var/log/clickhouse*
 ⚠️ 이 명령은 데이터까지 삭제하니 업그레이드가 목적이라면 사용 금지입니다.
 
 
+
+
+
+✅ 핵심 성능 최적화 옵션 요약
+옵션명	기본값	설명
+query_plan_optimize_lazy_materialization	0	필요한 열만 나중에 materialize → SELECT *, ORDER BY, LIMIT 조합에 필수
+optimize_read_in_order	1	ORDER BY가 테이블 정렬 키와 같을 때 정렬 없이 읽도록 최적화
+optimize_read_in_window_order	1	윈도우 함수에 ORDER BY가 있으면 정렬 없이 읽도록 최적화
+join_algorithm	auto	grace_hash, partial_merge, hash 등 자동 선택 → 대용량 JOIN 처리 최적화
+max_threads	서버 코어 수	병렬 처리 최대 스레드 수 설정 → 코어 수에 맞춰 조절하면 속도 향상
+max_bytes_before_external_group_by	0	GROUP BY 결과가 이 이상이면 디스크 spill 사용 → Out-of-Memory 방지
+group_by_two_level_threshold	1000000	GROUP BY key 수가 이 수 이상이면 two-level group by 적용 (더 빠름)
+optimize_aggregation_in_order	0	ORDER BY에 기반한 정렬된 상태에서의 집계 최적화
+enable_distributed_aggregation_memory_efficient	0	분산 쿼리 시 메모리 친화적인 방식 사용
+distributed_group_by_no_merge	0	각 shard에서 aggregation 후 central merge 생략 → 일부 분석 쿼리에서 빠름
+
+✅ 실전 적용 예시
+sql
+복사
+편집
+SET query_plan_optimize_lazy_materialization = 1;
+SET optimize_read_in_order = 1;
+SET optimize_aggregation_in_order = 1;
+SET join_algorithm = 'auto';
+SET max_threads = 8;  -- CPU 수에 따라 조절
+SET group_by_two_level_threshold = 1000000;
+✅ 쿼리 플래너 확인
+옵션 적용이 실제 효과를 보는지 확인하려면 EXPLAIN 또는 EXPLAIN PIPELINE 사용:
+
+sql
+복사
+편집
+EXPLAIN PIPELINE
+SELECT ...
+FROM big_table
+JOIN ...
+ORDER BY created_at DESC
+LIMIT 100;
+✅ 추가 추천: 테이블 구조 + 엔진 튜닝
+전략	설명
+MergeTree의 ORDER BY 키 튜닝	자주 쓰는 WHERE, ORDER BY, JOIN 컬럼 위주로 구성
+TTL로 오래된 데이터 자동 정리	쿼리 대상 데이터 감소
+Materialized View 사용	복잡한 조인/집계 결과를 미리 저장해 빠르게 조회
+CollapsingMergeTree, ReplacingMergeTree	최신 상태만 유지할 때 유리한 엔진
+Dictionary + JOIN	큰 dimension 테이블은 dictionary로 치환해서 빠른 lookup
+
+✅ 마무리 요약
+복잡한 쿼리를 빠르게 하려면:
+
+query_plan_optimize_lazy_materialization = 1 꼭 켜기
+
+JOIN, ORDER BY, GROUP BY 관련 옵션 최적화
+
+max_threads, group_by_two_level_threshold 등 자원 기반 조정
+
+쿼리 플랜을 항상 EXPLAIN으로 확인
+
+테이블 자체의 ORDER BY, 파티셔닝, 엔진 구조도 병행 조정
+
+
