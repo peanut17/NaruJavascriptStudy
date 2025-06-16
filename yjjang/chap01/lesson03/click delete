@@ -1,0 +1,258 @@
+
+Oracle → Kafka → Spark → ClickHouse 실시간 CDC 파이프라인에서 "삭제(Delete)" 이벤트를 ClickHouse에 반영하려면, Spark Structured Streaming 코드에서 Kafka 메시지의 op 필드를 분석하고, 삭제(op = 'd')인 경우 해당 키를 기준으로 ClickHouse에서 삭제 쿼리를 실행해야 합니다.
+
+ClickHouse는 Spark SQL의 DELETE 연산을 직접 지원하지 않기 때문에, 일반적으로 아래 방식 중 하나를 사용합니다:
+
+
+---
+
+✅ 전제 조건
+
+Debezium 등 CDC 도구를 통해 Kafka로 적재 시 아래와 같은 JSON 구조로 메시지를 받는다고 가정:
+
+{
+  "before": {
+    "id": 101,
+    "name": "John"
+  },
+  "op": "d",
+  "ts_ms": 1717846220000
+}
+
+op = 'c' → insert
+
+op = 'u' → update
+
+op = 'd' → delete
+
+before.id → 삭제할 레코드의 키
+
+
+
+---
+
+✅ ClickHouse 테이블: ReplacingMergeTree 또는 CollapsingMergeTree 활용
+
+삭제 연산은 CollapsingMergeTree 사용 시에만 의미가 있습니다. 아래 Spark 코드 예시는 이 구조를 기준으로 합니다.
+
+
+---
+
+✅ Spark 코드 (Kafka → ClickHouse, Delete 처리)
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+
+val spark = SparkSession.builder()
+  .appName("KafkaToClickHouseCDC")
+  .getOrCreate()
+
+// Kafka 메시지 수신
+val kafkaDF = spark.readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "broker:9092")
+  .option("subscribe", "oracle-cdc-topic")
+  .load()
+
+// JSON 파싱
+val parsedDF = kafkaDF.selectExpr("CAST(value AS STRING) as json_str")
+  .select(from_json($"json_str", schema).as("data"))
+  .selectExpr("data.before.id as id", "data.op as op")
+
+// 삭제와 삽입 분리
+val deletesDF = parsedDF.filter($"op" === "d")
+  .withColumn("sign", lit(-1))
+  .select($"id", $"sign")  // 필요한 키 컬럼만
+
+val insertsDF = parsedDF.filter($"op" === "c" || $"op" === "u")
+  .withColumn("sign", lit(1))
+  .select($"id", $"sign")  // 여기에 다른 컬럼도 추가 가능
+
+val finalDF = deletesDF.union(insertsDF)
+
+// ClickHouse로 적재
+finalDF.writeStream
+  .foreachBatch { (batchDF, batchId) =>
+    batchDF.write
+      .format("jdbc")
+      .option("url", "jdbc:clickhouse://your-host:8123/default")
+      .option("driver", "com.clickhouse.jdbc.ClickHouseDriver")
+      .option("dbtable", "your_table")
+      .option("user", "default")
+      .option("password", "")
+      .mode("append")
+      .save()
+  }
+  .start()
+  .awaitTermination()
+
+
+---
+
+✅ ClickHouse 테이블 예시 (CollapsingMergeTree)
+
+CREATE TABLE your_table
+(
+  id UInt64,
+  sign Int8
+) ENGINE = CollapsingMergeTree(sign)
+ORDER BY id;
+
+sign = 1 → insert/update
+
+sign = -1 → delete
+
+이후 OPTIMIZE TABLE your_table FINAL; 또는 주기적인 TTL 및 백그라운드 머지로 물리적 삭제됨
+
+
+
+---
+
+🔁 참고: ReplacingMergeTree로 삭제 처리하려면?
+
+삭제는 직접 반영되지 않음. sign을 써서 논리적 삭제 처리 후 머지 시 제외하는 방식 필요.
+
+
+---
+
+필요하다면 upsert와 delete를 함께 다루는 복합 예시 코드도 만들어드릴 수 있어요. 사용 중인 테이블 엔진이나 CDC 메시지 형식(JSON 구조 예시)도 알려주시면 더 맞춤 코드로 드릴 수 있습니다.
+
+
+
+
+
+
+좋습니다. Oracle → Kafka → Spark → ClickHouse CDC 파이프라인에서 upsert + delete를 함께 처리하는 복합 예시를 아래에 정리해 드립니다. 이 예시는 **Debezium 스타일 Kafka 메시지(JSON)**를 기준으로 하고, ClickHouse는 CollapsingMergeTree를 사용하여 삭제를 처리합니다.
+
+
+---
+
+✅ 전제
+
+Kafka 메시지 포맷 (Debezium 기준):
+
+
+{
+  "before": { "id": 1, "name": "John" },
+  "after": { "id": 1, "name": "Johnny" },
+  "op": "u"
+}
+
+op = 'c': create
+
+op = 'u': update
+
+op = 'd': delete
+
+op = 'r': snapshot (필요 시 필터링)
+
+
+
+---
+
+✅ ClickHouse 테이블 (CollapsingMergeTree)
+
+CREATE TABLE user_data
+(
+  id UInt64,
+  name String,
+  sign Int8
+) ENGINE = CollapsingMergeTree(sign)
+ORDER BY id;
+
+
+---
+
+✅ Spark Structured Streaming 코드 (Scala 기준)
+
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.SparkSession
+
+val spark = SparkSession.builder()
+  .appName("CDC Kafka to ClickHouse")
+  .getOrCreate()
+
+// Kafka 메시지 수신
+val kafkaDF = spark.readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "your-kafka:9092")
+  .option("subscribe", "oracle-cdc-topic")
+  .option("startingOffsets", "latest")
+  .load()
+
+// Debezium 메시지 스키마
+val debeziumSchema = new StructType()
+  .add("before", new StructType()
+    .add("id", LongType)
+    .add("name", StringType))
+  .add("after", new StructType()
+    .add("id", LongType)
+    .add("name", StringType))
+  .add("op", StringType)
+
+// JSON 파싱
+val parsedDF = kafkaDF.selectExpr("CAST(value AS STRING) as json")
+  .select(from_json(col("json"), debeziumSchema).as("data"))
+  .select("data.before", "data.after", "data.op")
+
+// Insert / Update 처리 (op = 'c' or 'u')
+val upsertDF = parsedDF
+  .filter(col("op").isin("c", "u"))
+  .select(col("after.id").as("id"), col("after.name").as("name"))
+  .withColumn("sign", lit(1))
+
+// Delete 처리 (op = 'd')
+val deleteDF = parsedDF
+  .filter(col("op") === "d")
+  .select(col("before.id").as("id"), col("before.name").as("name")) // name은 그대로
+  .withColumn("sign", lit(-1))
+
+// 최종 통합 DF
+val finalDF = upsertDF.union(deleteDF)
+
+// ClickHouse 적재
+finalDF.writeStream
+  .foreachBatch { (batchDF, batchId) =>
+    batchDF.write
+      .format("jdbc")
+      .option("url", "jdbc:clickhouse://clickhouse-host:8123/default")
+      .option("driver", "com.clickhouse.jdbc.ClickHouseDriver")
+      .option("dbtable", "user_data")
+      .option("user", "default")
+      .option("password", "")
+      .mode("append")
+      .save()
+  }
+  .outputMode("append")
+  .start()
+  .awaitTermination()
+
+
+---
+
+✅ 주의할 점
+
+CollapsingMergeTree는 실제 삭제는 머지 시점에 발생하므로, 주기적으로 OPTIMIZE TABLE user_data FINAL을 실행해야 합니다.
+
+중복 레코드가 있을 경우, id 외에도 updated_at 등을 기준으로 정렬하거나 ReplacingMergeTree와 혼합하여 커스텀 로직 구성 가능
+
+Kafka 메시지 크기가 크거나 지연 이슈가 있으면 watermark와 checkpoint 조정 필요
+
+
+
+---
+
+❓추가 구성 가능:
+
+Java 기반 Spark 코드 예시 제공
+
+파이프라인에 Retry/Failover 로직 추가
+
+Kafka topic별 라우팅 처리
+
+변경된 필드만 별도 추적하기 위한 Delta 로그 구성
+
+
+필요 시 말씀 주세요.
+
