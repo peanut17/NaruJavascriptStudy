@@ -1,0 +1,127 @@
+
+ClickHouse는 기본적으로 Upsert(INSERT ... ON DUPLICATE KEY UPDATE) 기능이 없기 때문에, UPDATE 또는 DELETE + INSERT 방식으로 키 기준의 데이터를 갱신해야 합니다. PySpark로 처리하고 있다면, 아래와 같이 단계적으로 설계할 수 있습니다.
+
+
+---
+
+✅ 1. 기본 전제
+
+Kafka에서 CDC(Change Data Capture) 방식으로 op_code를 기준으로 I, U, D 이벤트를 수신
+
+각 row는 before, after 구조의 JSON 형태
+
+각 테이블마다 Primary Key 역할을 하는 컬럼 목록이 존재 (예: JSON 파일로 매핑)
+
+
+
+---
+
+✅ 2. Update (U) 이벤트 처리 방법
+
+🔹 2-1. PySpark에서 'U' 이벤트 필터링
+
+update_df = df.filter(col("op_code") == "U")
+
+🔹 2-2. foreachPartition으로 병렬 처리
+
+update_df.foreachPartition(lambda partition: handle_update_partition(partition))
+
+🔹 2-3. 파티션 처리 함수
+
+def handle_update_partition(rows):
+    from clickhouse_driver import Client
+    client = Client(host="your_host", database="your_db", user="default", password="your_pw")
+    
+    for row in rows:
+        row_dict = row.asDict()
+        handle_update(row_dict, client)
+
+
+---
+
+✅ 3. handle_update 함수
+
+import json
+
+def handle_update(row, client):
+    before = row.get("before")
+    after = row.get("after")
+    table = row.get("table")  # 예: "user", "order"
+
+    if not before or not after:
+        print("[WARN] before/after 누락")
+        return
+
+    # 🔍 키 목록 로딩 (테이블별 키 매핑 JSON)
+    with open("primary_keys.json") as f:
+        pk_map = json.load(f)
+
+    primary_keys = pk_map.get(table)
+    if not primary_keys:
+        print(f"[ERROR] 테이블 {table}의 PK 정보 없음")
+        return
+
+    # 🔄 변경된 컬럼만 SET 구성
+    set_clause = []
+    for col in after:
+        if before.get(col) != after.get(col):
+            set_clause.append(f"{col} = {format_value(after[col])}")
+    
+    if not set_clause:
+        return  # 변경 없음
+
+    # 🔑 WHERE 조건 구성
+    where_clause = " AND ".join([f"{key} = {format_value(before[key])}" for key in primary_keys])
+
+    # 📤 SQL 실행
+    sql = f"ALTER TABLE {table} UPDATE {', '.join(set_clause)} WHERE {where_clause}"
+    client.execute(sql)
+
+🔹 format_value 함수
+
+ClickHouse용 SQL에 맞게 값 포맷
+
+def format_value(val):
+    if isinstance(val, str):
+        return f"'{val}'"
+    elif val is None:
+        return 'NULL'
+    else:
+        return str(val)
+
+
+---
+
+✅ 4. 보완 포인트
+
+성능 최적화: UPDATE는 ClickHouse에서 느릴 수 있음 → 배치 업데이트/TTL/멀티 파티션 전략 고려
+
+트랜잭션 미지원: 여러 건을 동시에 변경하다 중간 실패 시 롤백 없음 → idempotent 설계 중요
+
+파티션 컬럼 포함 여부: UPDATE 대상 컬럼이 파티션 키 포함 여부에 따라 성능이 크게 달라짐
+
+
+
+---
+
+✅ 참고: JSON 키 매핑 예시 (primary_keys.json)
+
+{
+  "user": ["id"],
+  "order": ["order_id", "site_cd"]
+}
+
+
+---
+
+원하시거나 고려 중이신 부분
+
+merge_tree or replacing_merge_tree 사용에 따라 전략 달라질 수 있음
+
+DELETE + INSERT 방식으로 구현 원하시면 예시도 드릴 수 있습니다
+
+파티션 대상인 경우는 ALTER TABLE ... UPDATE가 불가한 경우도 있습니다
+
+
+필요하신 방식(예: UPDATE vs DELETE+INSERT)이나 구조적 제약사항이 있다면 추가로 알려주세요.
+
