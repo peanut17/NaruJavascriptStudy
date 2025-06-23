@@ -1,0 +1,110 @@
+
+좋습니다! Kafka에서 op_code = U일 때:
+
+before: 기존 값 → WHERE 절의 기준 (즉, PK 값)
+
+after: 변경된 값만 포함 → SET 절의 대상
+
+
+이런 구조라면, ClickHouse의 UPDATE 쿼리를 동적으로 생성해서 처리하면 됩니다.
+
+
+---
+
+✅ 전체 구조 요약
+
+def handle_update(row, client):
+    table = row.get("table")
+    before = row.get("before")
+    after = row.get("after")
+
+    if not before or not after:
+        print("[WARN] U 이벤트에 before/after가 없음")
+        return
+
+    # 1. 테이블별 PK 정보 로딩
+    with open("primary_keys.json") as f:
+        pk_map = json.load(f)
+
+    primary_keys = pk_map.get(table)
+    if not primary_keys:
+        print(f"[ERROR] 테이블 {table}의 PK 정보 없음")
+        return
+
+    # 2. SET 절 (after에 있는 컬럼만)
+    set_clause = ", ".join(
+        f"{col} = {format_value(val)}"
+        for col, val in after.items()
+    )
+
+    if not set_clause:
+        print("[INFO] 변경된 컬럼 없음 (after 비어 있음)")
+        return
+
+    # 3. WHERE 절 (before에 있는 PK 컬럼만)
+    where_clause = " AND ".join(
+        f"{col} = {format_value(before[col])}"
+        for col in primary_keys
+        if col in before
+    )
+
+    # 4. SQL 실행
+    sql = f"ALTER TABLE {table} UPDATE {set_clause} WHERE {where_clause}"
+    client.execute(sql)
+
+
+---
+
+🔧 format_value 함수 (SQL 안전하게 포맷)
+
+def format_value(val):
+    if val is None:
+        return 'NULL'
+    if isinstance(val, str):
+        return f"'{val.replace(\"'\", \"''\")}'"  # SQL injection 방지용 이스케이프
+    return str(val)
+
+
+---
+
+✅ 예시
+
+Kafka 메시지 예시
+
+{
+  "table": "user",
+  "op_code": "U",
+  "before": { "id": 1001 },
+  "after": { "name": "Alice", "age": 32 }
+}
+
+ClickHouse 실행될 SQL
+
+ALTER TABLE user
+UPDATE name = 'Alice', age = 32
+WHERE id = 1001
+
+
+---
+
+📌 보완 고려사항
+
+before에 PK가 없으면 UPDATE는 불가능 → validation 필요
+
+after가 너무 많거나 민감 데이터가 포함되면 audit log 고려
+
+ALTER TABLE ... UPDATE는 즉시 반영이 아닌 background merge로 처리됨
+
+
+
+---
+
+필요하시면:
+
+DELETE + INSERT 방식으로도 만들어 드릴 수 있고,
+
+Spark SQL 기반으로 분산 처리하는 PySpark 코드도 확장 가능합니다.
+
+
+추가 요청 주시면 맞춤 코드 더 드릴게요.
+
