@@ -1,0 +1,87 @@
+
+좋은 질문입니다. 결론부터 말씀드리면:
+
+> ❌ ClickHouse에는 ALTER TABLE ... UPDATE 결과를 즉시 SELECT에 반영하는 설정은 없습니다.
+
+
+
+
+---
+
+❗ 왜 즉시 반영이 안 되나요?
+
+ClickHouse는 OLAP 기반 컬럼 지향 DB로써, ALTER ... UPDATE는 내부적으로 아래처럼 작동합니다:
+
+1. 해당 row를 삭제(mark as obsolete)
+
+
+2. 새로운 row를 INSERT
+
+
+3. 실제 row 반영은 Background Merge 때 수행됨
+
+
+
+
+---
+
+✅ 관련 설정은 있으나 즉시 SELECT 반영용은 아님
+
+설정 옵션	설명
+
+mutations_sync	ALTER TABLE ... UPDATE를 클라이언트 차원에서 완료될 때까지 대기할 수 있게 해줌. <br>즉, 쿼리 실행 시 병합 작업이 끝날 때까지 기다리게 할 수 있음.
+mutations_wait_for_sync	mutations_sync의 SQL 힌트 버전. ALTER TABLE ... UPDATE ... SETTINGS mutations_sync=1 처럼 사용
+
+
+✅ 예시:
+
+ALTER TABLE user UPDATE name = 'Alice' WHERE id = 1001 SETTINGS mutations_sync = 1;
+
+해당 쿼리는 백그라운드 머지 완료까지 기다린 후 종료
+
+✅ 이 설정을 사용하면, 다음 SELECT에서 반영 될 가능성이 높아지지만
+
+❗ 대량 데이터나 느린 병합에서는 여전히 지연될 수 있음
+
+
+
+---
+
+🚫 하지만 주의할 점
+
+이 설정은 “실시간 SELECT 반영”을 보장하지 않음
+
+단지 UPDATE 머지 완료까지 blocking을 걸어줄 뿐임
+
+특히 머지 큐가 쌓여있거나, 파티션이 많을 경우 병합이 오래 걸림
+
+
+
+---
+
+✅ 완전한 실시간 SELECT 반영을 원한다면?
+
+방법	실시간성	설명
+
+ALTER ... UPDATE SETTINGS mutations_sync=1	⚠️ 거의 실시간	반영되도록 기다리지만 즉시성 보장은 아님
+DELETE + INSERT 방식	✅ 즉시 반영	즉시 SELECT 반영됨
+ReplacingMergeTree + INSERT	✅ 최신 row 반환	파티션 병합 전에도 최신값 조회됨 (with ORDER BY KEY)
+
+
+
+---
+
+🔚 결론
+
+질문	답변
+
+ALTER TABLE ... UPDATE가 즉시 SELECT에 반영되게 하는 설정이 있나요?	❌ 직접적으로는 없습니다
+mutations_sync = 1로 처리 대기 설정은 있나요?	✅ 있음 (거의 실시간)
+SELECT 결과에 즉시 반영하려면 어떻게 해야 하나요?	✅ DELETE + INSERT or ReplacingMergeTree 추천
+
+
+
+---
+
+원하시면 mutations_sync 옵션을 PySpark에서 사용하는 방식도 예시로 알려드릴게요.
+
