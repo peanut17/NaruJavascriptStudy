@@ -1,0 +1,108 @@
+
+아주 잘하셨습니다! 🎉
+이제 다운로드한 .whl 파일 4개를 폐쇄망 Red Hat 서버로 옮겼다면,
+다음 순서대로 설치하고 PySpark에서 clickhouse-driver를 사용할 수 있습니다.
+
+
+---
+
+✅ 전체 작업 순서 요약
+
+📦 1. 폐쇄망 서버에 .whl 파일 복사
+
+예: clickhouse_driver_offline_cp38/ 폴더 안에 아래 4개 파일이 있어야 합니다.
+
+clickhouse_driver-0.2.9-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+lz4-4.3.2-cp38-cp38-manylinux2014_x86_64.whl
+zstandard-0.22.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+six-1.16.0-py2.py3-none-any.whl
+
+
+---
+
+🛠️ 2. 오프라인 설치 명령 실행
+
+cd clickhouse_driver_offline_cp38
+
+pip install --no-index --find-links=. clickhouse-driver
+
+> 🔹 --no-index: PyPI 접근 차단
+🔹 --find-links=.: 현재 디렉토리에서만 .whl 파일 찾음
+
+
+
+📌 모든 .whl이 한 폴더에 있어야 자동 의존성 설치가 됩니다.
+
+
+---
+
+✅ 3. 설치 확인
+
+python3 -c "from clickhouse_driver import Client; print('✅ 설치 성공!')"
+
+
+---
+
+💡 4. PySpark에서 사용 예시
+
+Spark 코드에서 clickhouse_driver는 보통 foreachPartition 내부에서 사용합니다:
+
+from clickhouse_driver import Client
+
+def write_to_clickhouse(rows):
+    client = Client(host='clickhouse-host', database='default', user='default', password='')
+    for row in rows:
+        client.execute("INSERT INTO your_table (id, name) VALUES", [tuple(row)])
+
+# 예: PySpark DataFrame에서 사용
+df.foreachPartition(write_to_clickhouse)
+
+> 이때 clickhouse-driver는 PySpark가 실행되는 Python 환경에 설치되어 있어야 합니다.
+
+
+
+
+---
+
+🔍 추가 확인: PySpark가 사용하는 Python 확인
+
+echo $PYSPARK_PYTHON
+
+결과가 없다면 기본 시스템 python3 사용
+
+만약 PySpark가 별도 가상환경을 쓰고 있다면, 그 환경에 설치해야 합니다 (예: venv, conda 등)
+
+
+
+---
+
+🧩 가상환경에 설치해야 한다면?
+
+예:
+
+source /your/venv/bin/activate
+pip install --no-index --find-links=. clickhouse-driver
+
+
+---
+
+✅ 마무리
+
+이제 PySpark 코드 안에서 자유롭게:
+
+from clickhouse_driver import Client
+
+이렇게 import해서 ClickHouse에 직접 연결하고 쿼리할 수 있습니다.
+
+
+---
+
+필요하시면:
+
+INSERT, UPDATE, DELETE 실행 예시
+
+Spark 분산 처리에서 clickhouse-driver를 안정적으로 쓰는 구조
+
+
+도 바로 도와드릴게요.
+
