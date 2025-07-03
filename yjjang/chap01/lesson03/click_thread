@@ -1,0 +1,82 @@
+
+좋습니다. 문제를 정확히 파악하셨습니다.
+에러 메시지:
+
+TypeError: cannot pickle '_thread.lock' object
+
+은 PySpark에서 foreachPartition에 넘긴 함수 내에 직렬화할 수 없는 객체가 포함되었을 때 발생합니다. 특히 이 경우:
+
+> 🔥 clickhouse_driver.Client 객체가 함수 외부에 정의되어 있어서 생긴 에러입니다.
+
+
+
+
+---
+
+✅ 문제 원인
+
+PySpark의 foreachPartition()은 내부적으로 해당 함수를 Spark worker 노드로 전송합니다.
+전송 시 함수 내부의 모든 변수나 객체를 pickle로 직렬화하려고 하는데,
+clickhouse_driver.Client 객체는 내부에 _thread.lock이 있어 직렬화 불가합니다.
+
+
+---
+
+✅ 해결 방법
+
+👉 Client 객체는 절대 전역으로 만들지 말고,
+foreachPartition() 안에서 생성해야 합니다.
+
+
+---
+
+🔧 수정 예시
+
+❌ 잘못된 코드 (직렬화 오류 발생)
+
+client = Client(...)  # 전역 정의 → ❌
+
+def update_partition(rows):
+    for row in rows:
+        client.execute(...)  # 에러 발생
+
+
+---
+
+✅ 올바른 코드 (정상 작동)
+
+def update_partition(rows):
+    from clickhouse_driver import Client  # 반드시 함수 내부에서 import & 생성
+    client = Client(host="your-clickhouse-host", database="your_db")
+
+    for row in rows:
+        # 쿼리 생성 및 실행
+        ...
+
+
+---
+
+✅ 요약 정리
+
+항목	설명
+
+에러 원인	Spark가 Client 객체를 직렬화하려다 실패
+핵심 해결	Client는 foreachPartition() 함수 내부에서 생성
+부가 팁	import clickhouse_driver도 가능하면 함수 내부에서 처리 (클린 직렬화 보장)
+
+
+
+---
+
+필요하시면 이 패턴을 확장해서:
+
+INSERT, DELETE, UPDATE 자동 처리
+
+병렬 최적화 설정 (repartition, trigger)
+
+실시간 테스트 시나리오
+
+
+도 바로 도와드릴 수 있습니다.
+지금 단계는 아주 잘 진행되고 있어요 👏
+
