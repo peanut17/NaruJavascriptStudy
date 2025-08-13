@@ -1,0 +1,69 @@
+좋아요, 그럼 정상 종료 시는 [OK], 에러 발생 시는 [ERROR]로 출력하는
+간단 + 에러 로그 포함 버전으로 수정해 드릴게요.
+
+
+---
+
+bulk_delete_ah_log.sh
+
+#!/usr/bin/env bash
+
+HOST="127.0.0.1"
+PORT="9000"
+USER="default"
+PASS="비밀번호"
+DB="mydb"
+
+# 실행
+if clickhouse-client --host "$HOST" --port "$PORT" \
+    --user "$USER" --password "$PASS" --database "$DB" \
+    --multiquery <<'SQL'
+ALTER TABLE A DELETE WHERE 1=1;
+ALTER TABLE B DELETE WHERE 1=1;
+ALTER TABLE C DELETE WHERE 1=1;
+ALTER TABLE D DELETE WHERE 1=1;
+ALTER TABLE E DELETE WHERE 1=1;
+ALTER TABLE F DELETE WHERE 1=1;
+ALTER TABLE G DELETE WHERE 1=1;
+ALTER TABLE H DELETE WHERE 1=1;
+SQL
+then
+    echo "[OK] A~H 삭제 명령 전송 완료"
+else
+    echo "[ERROR] 삭제 명령 실행 중 오류 발생" >&2
+fi
+
+
+---
+
+특징
+
+1. if ... then ... else 구조로 성공/실패 구분
+
+
+2. 실패 시 에러 메시지를 stderr(>&2)로 출력 → 로그 파일 저장 시 정상 로그와 분리 가능
+
+
+3. 여전히 단순한 구조 유지
+
+
+
+
+---
+
+💡 만약 실행 로그를 파일로 남기고 싶으면:
+
+./bulk_delete_ah_log.sh > delete_ok.log 2> delete_err.log
+
+성공 로그 → delete_ok.log
+
+에러 로그 → delete_err.log
+
+
+
+---
+
+원하시면 여기에 실패한 쿼리만 재실행하는 기능까지 넣어서 만들어줄 수도 있습니다.
+그렇게 하면 중간에 한두 테이블만 실패해도 전체를 다시 안 돌려도 됩니다.
+그 버전도 만들어 드릴까요?
+
