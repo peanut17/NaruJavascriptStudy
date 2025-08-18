@@ -1,0 +1,137 @@
+
+좋아요—그럼 Nginx는 배제하고 TCP(9000) 직결 환경 기준으로 Broken pipe (code 210) 잡는 방법을 바로 정리해드릴게요. 핵심은 “서버가 결과를 쓰는 중에 클라이언트 쪽에서 소켓을 먼저 닫음”입니다. 즉, 클라이언트 타임아웃/중단 혹은 중간 방화벽의 유휴 타임아웃 문제일 가능성이 큽니다.
+
+1) 빠른 원인 분리 테스트
+
+1. 전송 유무로 재현 분리
+
+
+
+# (A) 결과를 버리며 실행: 전송 없이 서버에서만 실행
+clickhouse-client -h <host> -p 9000 \
+  --receive_timeout=600 --send_timeout=600 \
+  -q "<문제 쿼리>" --format=Null
+
+# (B) 실제 결과를 받으며 실행
+clickhouse-client -h <host> -p 9000 \
+  --receive_timeout=600 --send_timeout=600 \
+  --compression=1 -q "<문제 쿼리>"
+
+(A)는 통과, (B)에서만 끊기면 전송 시간/용량 때문에 클라이언트나 중간장비가 끊는 겁니다.
+
+
+2. 블록 크기 줄여 전송 주기 늘리기
+
+
+
+clickhouse-client -h <host> -p 9000 \
+  --receive_timeout=600 --send_timeout=600 \
+  -q "SET max_block_size=8192; <문제 쿼리>"
+
+→ 큰 청크 한 번에 밀기보다 자주·작게 보내면 끊김이 줄어듭니다.
+
+3. Query Log로 인터페이스/주체 확인
+
+
+
+SELECT event_time, interface, client_name, address, type, error_code, exception, query_id
+FROM system.query_log
+WHERE type='Exception' AND error_code=210
+ORDER BY event_time DESC
+LIMIT 50;
+
+interface=1 이면 TCP. 같은 query_id가 직전에 Cancelled로 끝났는지(클라가 먼저 취소했는지)도 확인해보세요.
+
+
+2) 클라이언트 쪽 조치 (가장 효과 큼)
+
+clickhouse-client: 위처럼 --receive_timeout, --send_timeout을 넉넉히(예: 600초), --compression=1 사용.
+
+Python (clickhouse-driver):
+
+
+from clickhouse_driver import Client
+client = Client(
+    host='...', port=9000, user='...', password='...', database='...',
+    connect_timeout=10,
+    send_receive_timeout=600,
+    compression=True,
+    settings={'max_block_size': 8192}   # 전송 블록 크기 축소
+)
+
+JDBC: URL에 socket_timeout=600000(ms) 등 추가. 대용량 결과면 fetchSize/streaming 옵션을 사용(드라이버별 상이).
+
+Spark (JDBC/커넥터 사용 시):
+
+spark.network.timeout=600s
+
+(필요시) spark.executor.heartbeatInterval=60s
+
+커넥터 소켓/리드 타임아웃 옵션 상향, 파티션/날짜 단위 슬라이싱 조회.
+
+
+
+3) OS/TCP Keepalive로 유휴 연결 끊김 방지
+
+중간 방화벽/IPS가 유휴 TCP를 빨리 정리하면 장시간 쿼리에서 끊깁니다. 서버와 클라이언트 양쪽에 keepalive를 적극 적용하세요.
+
+# /etc/sysctl.d/99-clickhouse-keepalive.conf (예시)
+net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 5
+
+sudo sysctl --system
+
+4) 쿼리/전송 전략
+
+정말 필요한 컬럼만 선택, WHERE로 범위 좁히기.
+
+결과가 아주 크면:
+
+날짜/키 범위로 여러 번 나눠 조회,
+
+혹은 임시 테이블에 저장 → 페이지 단위로 SELECT.
+
+
+서버 프로필에서 전송 안정화:
+
+max_block_size(약간 축소, 예 8192)
+
+(HTTP가 아니어도) 결과 압축을 클라이언트에서 켜는 게 유효.
+
+
+
+5) 네트워크 레벨 확인(정밀)
+
+문제 시간이 재현될 때 누가 먼저 끊는지 패킷으로 확인하면 확실합니다.
+
+sudo tcpdump -i any 'tcp port 9000' -nn -vv
+
+클라이언트 측 RST/FIN이면 앱/드라이버 타임아웃/취소,
+
+중간 장비 흔적이면 방화벽/IPS의 Idle Timeout.
+
+
+
+---
+
+바로 적용 체크리스트 (요약)
+
+1. clickhouse-client로 Null 포맷 vs 실제 전송 비교 테스트.
+
+
+2. 클라이언트에서 receive_timeout/send_timeout 상향, compression=1, max_block_size=8192.
+
+
+3. OS TCP keepalive 적용(서버/클라).
+
+
+4. 결과가 크면 슬라이싱/페이지로 쿼리 설계.
+
+
+5. 여전히 발생하면 tcpdump로 끊는 주체 특정.
+
+
+
+환경(사용 중인 드라이버/언어, 방화벽 유무)을 알려주시면 그 조합에 맞춰 정확한 설정 값을 딱 맞게 잡아드릴게요.
+
