@@ -1,0 +1,135 @@
+
+좋습니다 👍
+
+지금 상황은 TCP 9000 직결이고, Broken pipe (code 210) 가 계속 발생 → 클라이언트가 소켓을 먼저 끊거나, 전송 과정에서 유휴 타임아웃이 걸린다는 의미예요.
+
+
+ClickHouse 서버 설정 쪽에서 할 수 있는 안정화 방법을 정리해드릴게요.
+
+
+
+📌 ClickHouse 설정 정리 (code 210 방지용)
+
+
+1. 사용자 프로파일에 네트워크/전송 관련 파라미터 설정
+
+
+/etc/clickhouse-server/users.d/profiles.xml (또는 /etc/clickhouse-server/users.xml) 안에 프로파일 추가:
+
+
+<yandex>
+  <profiles>
+    <default> <!-- 또는 사용중인 프로파일 이름 -->
+      <!-- 블록 크기 줄여서 전송 안정화 -->
+      <max_block_size>8192</max_block_size>
+
+      <!-- 네트워크 타임아웃 (초) -->
+      <receive_timeout>600</receive_timeout>
+      <send_timeout>600</send_timeout>
+      <connect_timeout>10</connect_timeout>
+
+      <!-- 압축 전송 켜기 -->
+      <enable_tcp_compression>1</enable_tcp_compression>
+    </default>
+  </profiles>
+</yandex>
+
+
+
+→ 큰 쿼리 결과를 한 번에 밀어내지 않고, 작고 자주 보내면서 끊김을 줄여줍니다.
+
+
+
+2. 서버 설정에서 Keepalive 적용
+
+
+/etc/clickhouse-server/config.xml 의 <tcp_port> 아래쪽이나 <listen_host> 근처에 다음 옵션을 추가할 수 있어요:
+
+
+<tcp_keep_alive_timeout>60</tcp_keep_alive_timeout>
+
+
+
+
+
+60초마다 keepalive 패킷을 보내서 방화벽/네트워크 장비가 연결을 죽이지 않도록 합니다.
+
+
+
+
+
+3. 시스템 레벨(TCP Keepalive) 튜닝
+
+
+ClickHouse 자체 설정 외에도 리눅스 TCP Keepalive를 짧게 잡아줘야 안전합니다.
+
+
+/etc/sysctl.d/99-clickhouse-keepalive.conf 생성:
+
+
+net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 5
+
+
+
+적용:
+
+
+sudo sysctl --system
+
+
+
+
+4. 쿼리 최적화 전략 (서버+쿼리 측면)
+
+
+
+
+꼭 필요한 컬럼만 SELECT
+
+
+WHERE 조건으로 범위 제한
+
+
+결과가 큰 경우 날짜/파티션 단위로 나눠서 조회
+
+
+필요시 LIMIT ... OFFSET 또는 WITH TOTALS 대신 집계 테이블 활용
+
+
+
+
+
+5. 적용 후 재시작
+
+
+sudo systemctl restart clickhouse-server
+
+
+
+
+✅ 최종 체크리스트
+
+
+
+
+[ ] profiles.xml → max_block_size, *_timeout, enable_tcp_compression 적용
+
+
+[ ] config.xml → <tcp_keep_alive_timeout> 적용
+
+
+[ ] OS sysctl → TCP keepalive 튜닝
+
+
+[ ] 쿼리 → 슬라이싱/최적화
+
+
+
+
+
+👉 질문: 지금 주로 ClickHouse에 접속하는 클라이언트가 어떤 것인가요? (예: Python clickhouse-driver, Spark, BI 툴, CLI 등)
+
+→ 클라이언트별로도 맞춤 설정을 같이 해줘야 진짜 효과가 있어요.
+
