@@ -1,0 +1,262 @@
+sudo dpkg -i grafana_11.2.0_amd64.deb
+# 의존성 문제 있으면:
+sudo apt-get -f install
+
+
+sudo systemctl enable grafana-server
+sudo systemctl start grafana-server
+sudo systemctl status grafana-server
+
+접속: http://<VM_IP>:3000 (기본 로그인: admin / admin)
+
+
+3. 플러그인/대시보드 오프라인 설치
+
+인터넷이 안 되므로 플러그인이나 대시보드 JSON은 온라인 PC에서 미리 받아야 합니다.
+
+Grafana Marketplace에서 JSON 다운로드 → 오프라인 서버의 /var/lib/grafana/dashboards/ 에 복사 → Grafana UI에서 import.
+
+
+
+
+
+. 확인: Prometheus가 ClickHouse 메트릭을 긁어오는지
+
+Prometheus 설정(prometheus.yml)에 이미 들어있어야 합니다:
+
+scrape_configs:
+  - job_name: 'clickhouse_native'
+    static_configs:
+      - targets: ['192.168.173.130:9363']   # VM IP
+
+
+확인:
+
+http://<Prometheus_IP>:9090/targets → clickhouse_native 상태가 UP 인지
+
+http://<Prometheus_IP>:9090/graph → 예: clickhouse_asynchronous_metrics_MemoryResident
+
+2. Grafana에서 Prometheus 연결
+
+Grafana 접속 → http://<Grafana_IP>:3000
+
+로그인 (admin/admin)
+
+Connections → Data sources → Add data source → Prometheus 선택
+
+URL: http://<Prometheus_IP>:9090
+
+Save & Test → “Data source is working” 나오면 OK
+
+3. 새 대시보드 생성 + 패널 추가
+
+왼쪽 메뉴 → 📊 Dashboards → New → New Dashboard
+
+Add a new panel 클릭
+
+쿼리 입력란에 PromQL 작성:
+
+clickhouse_asynchronous_metrics_MemoryResident / 1024^3
+
+
+👉 ClickHouse 프로세스의 메모리 사용량(GB)
+
+Visualization → Time series 선택
+
+오른쪽에서 그래프 제목/단위(GB) 등 설정
+
+4. 저장 및 확인
+
+상단 → Save Dashboard
+
+이제 ClickHouse 메모리 사용량이 시간축 그래프로 표시됩니다.
+
+5. 추가 예시 (자주 쓰는 그래프)
+
+호스트 메모리 사용률 (%)
+
+100 * (1 - clickhouse_asynchronous_metrics_OSMemoryAvailable / clickhouse_asynchronous_metrics_OSMemoryTotal)
+
+
+쿼리 실행 횟수(초당)
+
+rate(clickhouse_events_Query[1m])
+
+
+CPU 사용률 (%)
+
+100 * (1 - avg_over_time(clickhouse_asynchronous_metrics_OSIdleTimeNormalized[1m]))
+
+
+👉 이렇게 하면 ClickHouse → Prometheus → Grafana 체인이 완성돼서 원하는 지표를 그래프로 확인할 수 있어요.
+
+원하시면 제가 ClickHouse 모니터링 대시보드 JSON 템플릿(메모리/CPU/쿼리 이벤트 3개 패널 포함)을 바로 드려서 Grafana에서 Import만 하면 나오게 해드릴까요?
+
+나의 말:
+ClickHouse 모니터링 대시보드 JSON 템플릿(메모리/CPU/쿼리 이벤트 3개 패널 포함)을 바로 드려서 Grafana에서 Import만 하면 나오게 해줘
+ChatGPT의 말:
+14s 동안 생각함
+
+알겠어요! 아래 Grafana 대시보드 JSON을 그대로 Import 하면,
+Prometheus에서 수집한 ClickHouse 메트릭으로 메모리 / CPU / 쿼리 QPS 3개 패널이 바로 뜹니다.
+
+사용 방법
+
+Grafana → Dashboards → Import
+
+아래 JSON을 붙여넣고 → Prometheus 데이터소스 선택 → Import
+
+대시보드 상단의 instance 드롭다운으로 특정 노드를 선택할 수 있어요.
+
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "ClickHouse Memory (GB)",
+      "id": 1,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "clickhouse_asynchronous_metrics_MemoryResident{instance=~\"$instance\"} / 1024^3",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "gbytes",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU Usage (%)",
+      "id": 2,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - avg_over_time(clickhouse_asynchronous_metrics_OSIdleTimeNormalized{instance=~\"$instance\"}[1m]))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queries per Second (QPS)",
+      "id": 3,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(clickhouse_events_Query{instance=~\"$instance\"}[1m])) by (instance)",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "instance",
+        "label": "Instance",
+        "hide": 0,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "refresh": 1,
+        "query": {
+          "query": "label_values(up{job=\"clickhouse_native\"}, instance)"
+        },
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": ".*"
+        },
+        "regex": "",
+        "sort": 1,
+        "options": []
+      }
+    ]
+  },
+  "title": "ClickHouse — Minimal Ops (Memory / CPU / QPS)",
+  "timezone": "",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s"
+}
+
+
+원하면 여기서 디스크 사용량/IO, 캐시(Mark/Uncompressed), 레플리케이션 상태 등도 패널로 더 붙여서 드릴 수 있어요.
