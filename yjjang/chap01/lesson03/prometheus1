@@ -1,0 +1,122 @@
+
+cd ~/prometheus-2.54.1.linux-arm64
+vi prometheus.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 자기 자신
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ClickHouse 내장 Prometheus 엔드포인트(9363)
+  - job_name: 'clickhouse_native'
+    static_configs:
+      - targets: ['192.168.173.130:9363']   # VM IP로 교체
+
+실행
+./prometheus --config.file=./prometheus.yml --storage.tsdb.path=./data
+
+
+##A) 간단 백그라운드
+nohup ./prometheus --config.file=./prometheus.yml --storage.tsdb.path=./data > ./prometheus.out 2>&1 &
+
+
+##systemd 서비스 등록
+sudo nano /etc/systemd/system/prometheus.service
+
+[Unit]
+Description=Prometheus (tarball)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/prometheus-2.54.1.linux-arm64
+ExecStart=/home/ubuntu/prometheus-2.54.1.linux-arm64/prometheus \
+  --config.file=/home/ubuntu/prometheus-2.54.1.linux-arm64/prometheus.yml \
+  --storage.tsdb.path=/home/ubuntu/prometheus-2.54.1.linux-arm64/data \
+  --web.enable-lifecycle
+Restart=always
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+
+#####
+sudo systemctl daemon-reload
+sudo systemctl enable prometheus
+sudo systemctl start prometheus
+sudo systemctl status prometheus --no-pager
+
+### 방화벽 등록
+
+
+
+
+
+
+
+ClickHouse 25.4의 /metrics 엔드포인트는 system.asynchronous_metrics·system.metrics·system.events를 Prometheus 규격으로 노출합니다. “리소스 사용량” 중심으로 바로 쓸 수 있는 대표 메트릭(이름 그대로 복붙 가능)과 간단한 PromQL 예시를 정리했어요. 
+ClickHouse
++1
+
+메모리 (Memory)
+
+clickhouse_asynchronous_metrics_MemoryResident — ClickHouse 프로세스의 실사용 물리 메모리(bytes).
+
+clickhouse_asynchronous_metrics_MemoryResidentMax — 재시작 이후 최대 물리 메모리.
+
+clickhouse_asynchronous_metrics_OSMemoryTotal — 호스트 총 메모리(bytes).
+
+clickhouse_asynchronous_metrics_OSMemoryAvailable — 애플리케이션이 사용 가능한 가용 메모리(bytes).
+
+clickhouse_asynchronous_metrics_OSMemoryCached — 페이지 캐시(bytes).
+
+clickhouse_asynchronous_metrics_OSMemoryBuffers — 커널 버퍼(bytes).
+
+(캐시) clickhouse_asynchronous_metrics_MarkCacheBytes, clickhouse_asynchronous_metrics_UncompressedCacheBytes — ClickHouse 내부 캐시 사용량.
+위 메트릭들은 모두 /metrics에 게이지로 노출됩니다. 
+ClickHouse
+
+PromQL 예시
+
+# CH 프로세스 메모리(GB)
+clickhouse_asynchronous_metrics_MemoryResident / 1024^3
+
+# 호스트 메모리 사용률(0~1)
+1 - (clickhouse_asynchronous_metrics_OSMemoryAvailable / clickhouse_asynchronous_metrics_OSMemoryTotal)
+
+# 마크캐시 / 언컴프레스트 캐시(GB)
+clickhouse_asynchronous_metrics_MarkCacheBytes / 1024^3
+clickhouse_asynchronous_metrics_UncompressedCacheBytes / 1024^3
+
+CPU (호스트 관점, 정규화된 비율)
+
+clickhouse_asynchronous_metrics_OSUserTimeNormalized
+
+clickhouse_asynchronous_metrics_OSSystemTimeNormalized
+
+clickhouse_asynchronous_metrics_OSIdleTimeNormalized
+
+clickhouse_asynchronous_metrics_OSIOWaitTimeNormalized
+
+clickhouse_asynchronous_metrics_OSSoftIrqTimeNormalized
+
+clickhouse_asynchronous_metrics_OSIrqTimeNormalized
+
+clickhouse_asynchronous_metrics_OSStealTimeNormalized
+(각각 0~1 범위, 코어 수에 무관하게 비교 가능) 
+ClickHouse
+
+PromQL 예시
+
+# CPU 사용률(%) = 100 * (1 - idle)
+100 * (1 - avg_over_time(clickhouse_asynchronous_metrics_OSIdleTimeNormalized[1m]))
+
+# 사용자/커널 비중(%) 
+100 * avg_over_time(clickhouse_asynchronous_metrics_OSUserTimeNormalized[1m])
+100 * avg_over_time(clickhouse_asynchronous_metrics_OSSystemTimeNormalized[1m])
+
