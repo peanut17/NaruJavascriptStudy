@@ -1,0 +1,122 @@
+
+오케이, 웹서버가 Tomcat이고 “예전엔 잘 됐는데 지금 400, API 쪽엔 로그 없음”이면, 대개 Tomcat 단에서 요청을 거절해서 API까지 못 가는 케이스가 많아요. 아래 순서대로 보면 금방 좁혀집니다.
+
+Tomcat에서 400이 잘 터지는 대표 원인 (TOP 6)
+
+1. 요청 URI에 ‘특수문자’ 포함
+
+최근에 파라미터에 []{}^|<> ` 같은 문자가 들어가면 Tomcat이 요청 자체를 차단 → 400
+
+catalina.out/localhost_access_log에 보통
+Invalid character found in the request target 식으로 남습니다.
+
+✅ 해결: server.xml의 Connector에 relaxedPathChars, relaxedQueryChars 추가
+
+
+
+2. 헤더/쿠키가 너무 큼 (특히 JSESSIONID 다중, 거대한 쿠키)
+
+에러 로그에 Request header is too large 류 메시지
+
+✅ 해결: maxHttpHeaderSize(Tomcat) 또는 Spring Boot면 server.max-http-header-size 상향
+
+
+
+3. HTTP↔HTTPS 스킴/포트 착오
+
+내부 호출 URL이 http:// → 실제 API는 https:// (혹은 그 반대)
+
+TLS 핸드셰이크도 안 가고 바로 400 날 수 있음
+
+✅ 해결: 호출 URL/포트 재확인 (환경변수/설정 변경 이력 확인)
+
+
+
+4. 잘못된 Content-Type
+
+프런트(또는 웹서버 코드)가 API로 JSON 보내는데 Content-Type: application/json 누락
+
+API 앞단(게이트웨이/Ingress)이 400을 반환하는데, API 앱 로그는 비어 있을 수 있음
+
+✅ 해결: 호출 코드에 Content-Type/인코딩 명확히 설정
+
+
+
+5. 청크 전송/바디 길이 불일치
+
+Transfer-Encoding: chunked인데 실제 바디가 형식 위반 → 프록시/게이트웨이 400
+
+✅ 해결: 호출 라이브러리 설정 점검, curl -v로 재현
+
+
+
+6. 허용 메서드/경로 변경
+
+API 라우팅/게이트웨이 정책이 바뀌어 특정 메서드(혹은 경로 패턴)를 거부
+
+✅ 해결: 게이트웨이/Ingress 로그 확인, 메서드/경로 규칙 동기화
+
+
+
+
+바로 해볼 “3단 점검”
+
+1. Tomcat 로그에서 원인 문자열 찾기
+
+grep -i "invalid character\|header too large\|request target" catalina.out
+
+뭔가 하나라도 걸리면 그게 정답일 확률 큼.
+
+
+
+2. Tomcat 서버에서 직접 API 호출 (네트워크/스킴 검증)
+
+# Tomcat 서버에서 그대로 재현
+curl -v "http://API_HOST:API_PORT/path?param=a%5Bb%5D" \
+  -H "Content-Type: application/json" \
+  --data '{"ping":"pong"}'
+
+여기서 200이면 브라우저→Tomcat 구간 문제(특수문자/헤더크기 등)
+
+여기서도 400이면 Tomcat→API 구간 문제(스킴, 포트, 게이트웨이 정책 등)
+
+
+
+3. 요청이 최근에 바뀌었는지 확인
+
+프론트에서 쿼리 파라미터나 쿠키가 늘었는지, 인코딩이 달라졌는지(공백, 한글, 특수문자)
+
+
+
+
+설정 예시 (Tomcat server.xml)
+
+<!-- conf/server.xml 의 Connector -->
+<Connector port="8080" protocol="org.apache.coyote.http11.Http11NioProtocol"
+           maxHttpHeaderSize="32768"
+           relaxedPathChars="[]|{}^`\"<>"
+           relaxedQueryChars="[]|{}^`\"<>"
+           maxSwallowSize="-1" />
+
+Spring Boot라면(웹서버/게이트웨이 쪽):
+
+# application.properties
+server.max-http-header-size=32KB
+server.tomcat.relaxed-path-chars="[]|{}^`\"<>"
+server.tomcat.relaxed-query-chars="[]|{}^`\"<>"
+
+호출 코드(예: RestTemplate/WebClient) 체크 포인트
+
+Content-Type/Accept 명시: application/json
+
+URI 인코딩 보장(특히 []{}|^<> 등)
+
+타임아웃/리다이렉트 설정 변경 이력(예: 프록시 통과 시 307/308 처리)
+
+
+
+---
+
+가장 흔한 실수는 특수문자 포함된 쿼리스트링과 쿠키/헤더 사이즈 초과입니다.
+위 로그 키워드 한 줄만 확인하면 바로 결론 낼 수 있어요. 만약 catalina.out에 에러 메시지 한 줄만 주시면, 거기에 맞춰서 정확한 수정값을 바로 찍어드릴게요.
+
