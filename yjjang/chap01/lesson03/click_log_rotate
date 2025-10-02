@@ -1,0 +1,79 @@
+
+좋습니다 👍 정리해 드리면, ClickHouse 자체 config.xml은 날짜별 파일 생성을 지원하지 않기 때문에 logrotate를 이용해야 합니다. logrotate 설정에서 daily + rotate 30 + dateext + dateformat을 지정하면 원하는 대로 됩니다.
+
+
+---
+
+📌 logrotate 설정 방법
+
+1. 설정 파일 생성/수정
+/etc/logrotate.d/clickhouse-server 파일을 열어 아래 내용을 넣으세요:
+
+
+
+/var/log/clickhouse-server/clickhouse-server.log
+/var/log/clickhouse-server/clickhouse-server.err.log {
+    daily                  # 하루 단위 회전
+    rotate 30              # 최대 30개 보관 (≈ 30일치)
+    dateext                # 회전본 파일명에 날짜 접미사 추가
+    dateformat -%Y-%m-%d   # 접미사 형식: -YYYY-MM-DD
+    compress               # 지난 로그 gzip 압축
+    delaycompress          # 막 회전한 로그는 다음 회전 때 압축
+    missingok              # 로그 없으면 무시
+    notifempty             # 비어 있으면 회전 안 함
+    maxsize 200M           # 하루 전에라도 200MB 넘으면 회전
+    copytruncate           # 서비스 중단 없이 기존 파일 비우기
+}
+
+👉 copytruncate 대신 postrotate+systemctl kill -s HUP clickhouse-server를 쓸 수도 있습니다. (환경에 따라 선택)
+
+
+---
+
+📌 동작 확인
+
+수동 회전 테스트
+
+
+sudo logrotate -f /etc/logrotate.d/clickhouse-server
+
+디버그 모드 (실제 회전 안 함)
+
+
+sudo logrotate -d /etc/logrotate.d/clickhouse-server
+
+자동 실행
+Ubuntu는 systemd timer 또는 cron.daily/logrotate로 하루 1회 자동 실행됩니다.
+
+
+
+---
+
+📌 날짜별 생성되는 로그파일 예시
+
+회전 후 /var/log/clickhouse-server/에 아래처럼 쌓입니다:
+
+clickhouse-server.log              ← 현재 로그 파일 (실시간 기록 중)
+clickhouse-server.log-2025-09-30.gz ← 2025년 9월 30일 회전본
+clickhouse-server.log-2025-10-01.gz ← 2025년 10월 1일 회전본
+clickhouse-server.log-2025-10-02.gz ← 2025년 10월 2일 회전본
+...
+
+clickhouse-server.err.log
+clickhouse-server.err.log-2025-09-30.gz
+clickhouse-server.err.log-2025-10-01.gz
+clickhouse-server.err.log-2025-10-02.gz
+...
+
+.log와 .err.log는 항상 최신 로그
+
+-YYYY-MM-DD.gz는 날짜별 보관 파일
+
+30일이 지나면 가장 오래된 파일부터 자동 삭제됨
+
+
+
+---
+
+👉 원하시면 제가 server.log, err.log, text_log.log, trace_log.log까지 한 번에 30일 보관하는 완성형 스니펫도 만들어 드릴 수 있어요. 그럴까요?
+
