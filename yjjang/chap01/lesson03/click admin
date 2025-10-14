@@ -1,0 +1,95 @@
+
+좋아요 👍
+아래는 ClickHouse 성능 개선에 필요한 주요 설정값을 실제 운영(폐쇄망 기준) 환경에서 검증된 항목별로 정리한 운영 가이드용 정리표입니다.
+(📘 설정 위치: /etc/clickhouse-server/config.xml 또는 /etc/clickhouse-server/config.d/*.xml)
+
+
+---
+
+🚀 ClickHouse 성능 개선 주요 설정 정리표
+
+구분	설정 항목	권장값 / 예시	설명
+
+1. 메모리 관리	<max_memory_usage>	전체 RAM의 80~90% (예: 64G)	단일 쿼리 사용 가능 메모리 상한
+	<max_memory_usage_for_user>	사용자 단위 제한 (예: 48G)	사용자별 쿼리 메모리 한도
+	<max_bytes_before_external_group_by>	4GB 이상	GROUP BY 시 디스크 스필 활성화 기준
+	<max_bytes_before_external_sort>	4GB 이상	정렬 중 메모리 한계 초과 시 디스크 사용
+	<max_memory_usage_to_ram_ratio>	0.85	전체 서버 메모리 대비 ClickHouse 사용 비율
+2. 병렬처리 (Thread Pool)	<max_threads>	CPU 코어 수와 동일 (예: 32)	최대 쿼리 병렬 스레드 수
+	<background_pool_size>	CPU 코어 수의 1~2배 (예: 32)	백그라운드 머지/컴팩션 병렬 스레드
+	<background_merges_mutations_concurrency_ratio>	2	Mutation/Merge 동시 실행 비율
+	<background_schedule_pool_size>	64	백그라운드 작업 스케줄러 수
+3. MergeTree 엔진 관련	<merge_max_size>	1024M	병합 단위 최대 크기
+	<parts_to_throw_insert>	100000	너무 많은 파티션 조각이 생성될 때 경고/차단
+	<parts_to_delay_insert>	50000	병합이 밀릴 경우 INSERT 지연
+	<max_part_loading_threads>	16	서버 시작 시 파티션 로딩 병렬화
+4. Disk / I/O 최적화	<max_open_files>	50000 이상	파일 핸들 제한 증가
+	<mark_cache_size>	8~32GB	마크 캐시 크기 (쿼리 성능 영향 큼)
+	<uncompressed_cache_size>	8~16GB	압축 해제된 블록 캐시
+	<merge_tree> → <min_bytes_for_wide_part>	1G 이상	작은 파티션을 compact 형태로 저장 방지
+5. 네트워크 / 세션 설정	<max_concurrent_queries>	200~500	동시 쿼리 허용 개수
+	<keep_alive_timeout>	30	클라이언트 세션 유지 시간
+	<receive_timeout> / <send_timeout>	60	네트워크 송수신 타임아웃
+	<tcp_keep_alive_timeout>	120	Broken pipe 방지 (네트워크 안정성 향상)
+6. INSERT / SELECT 성능	<max_insert_block_size>	1048576 (1M rows)	대량 적재 시 성능 향상
+	<min_insert_block_size_rows>	1048576	블록 단위 INSERT 기준
+	<max_block_size>	65536	SELECT 결과 한 블록당 최대 행 수
+	<min_compress_block_size>	65536	압축 최소 단위 (64KB)
+7. 쿼리 튜닝	<join_algorithm>	auto or hash	대용량 조인 시 성능 개선
+	<join_use_nulls>	0	조인 시 NULL값 무시 (성능 개선)
+	<distributed_product_mode>	global	분산 조인 허용 모드
+8. MergeTree TTL / 압축 정책	<merge_with_ttl_timeout>	3600	TTL 병합 주기 (1시간)
+	<max_ttl_delete_rows>	1000000	TTL 삭제 단위 조정
+	<compression>	lz4 (기본) / zstd (고압축)	스토리지 효율 조정
+9. 시스템 튜닝 (OS 수준)	/etc/security/limits.conf	nofile 100000, nproc 65535	파일 핸들/프로세스 한도 증가
+	/etc/sysctl.conf	vm.swappiness=1, fs.file-max=2097152	스왑 최소화 및 파일 핸들 증가
+	NUMA 설정	numactl --interleave=all	메모리 불균형 방지
+
+
+
+---
+
+📁 예시 설정 파일 구조
+
+/etc/clickhouse-server/config.d/10-performance.xml
+
+<yandex>
+    <!-- 메모리 -->
+    <max_memory_usage>64G</max_memory_usage>
+    <max_memory_usage_for_user>48G</max_memory_usage_for_user>
+    <max_concurrent_queries>300</max_concurrent_queries>
+
+    <!-- 병렬처리 -->
+    <background_pool_size>32</background_pool_size>
+    <background_merges_mutations_concurrency_ratio>2</background_merges_mutations_concurrency_ratio>
+
+    <!-- 캐시 -->
+    <mark_cache_size>17179869184</mark_cache_size>           <!-- 16GB -->
+    <uncompressed_cache_size>8589934592</uncompressed_cache_size> <!-- 8GB -->
+
+    <!-- 네트워크 -->
+    <tcp_keep_alive_timeout>120</tcp_keep_alive_timeout>
+</yandex>
+
+
+---
+
+🧠 성능 개선 운영 팁
+
+INSERT는 batch 단위로 (1M rows 단위) → clickhouse-client --max_insert_block_size=1000000
+
+쿼리 캐시 확인: system.query_log 테이블로 실행 시간/메모리 점검
+
+정기 Merge 압축: OPTIMIZE TABLE <name> FINAL (cron 배치 권장)
+
+대용량 파티션은 TTL 기반 자동정리 사용 (TTL occr_dt + INTERVAL 90 DAY DELETE)
+
+테스트 시 max_threads=1로 단일쿼리 성능 baseline 확보
+
+
+
+---
+
+원하신다면 이 내용을 기존 Word 검수 문서(clickhouse_운영가이드_최종.docx)에 “5. 성능 개선 주요 설정” 챕터로 병합해드릴 수도 있습니다.
+그렇게 병합된 최종 완성 Word 문서로 만들어드릴까요?
+
