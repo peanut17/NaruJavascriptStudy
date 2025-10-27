@@ -1,0 +1,73 @@
+
+좋아요. Oracle LISTAGG(… ON OVERFLOW TRUNCATE '…' WITH COUNT) WITHIN GROUP (ORDER BY …)를 Impala 4.x로 옮길 때의 실전 패턴을 정리해서 드릴게요. Impala에는 LISTAGG가 없고 대신 GROUP_CONCAT([ALL|DISTINCT] expr [, sep])만 있습니다. 또한 GROUP_CONCAT 안의 ORDER BY는 지원되지 않아 정렬 보장이 없으니(워크어라운드 필요) 이 점 유의하세요. 
+
+1) 가장 간단한 마이그레이션 (정렬 보장 없음)
+
+SELECT deptno,
+       CASE
+         WHEN LENGTH(s) > 4000
+           THEN CONCAT(
+                  SUBSTR(s, 1, 4000 - LENGTH(CONCAT('... (총 ', CAST(cnt AS STRING), '개)')) ),
+                  '... (총 ', CAST(cnt AS STRING), '개)'
+                )
+         ELSE s
+       END AS employee_list
+FROM (
+  SELECT deptno,
+         COUNT(*)                           AS cnt,
+         GROUP_CONCAT(ename, ', ')          AS s
+  FROM emp
+  GROUP BY deptno
+) t;
+
+GROUP_CONCAT 결과가 4000자를 넘으면 Oracle처럼 ... (총 n개) 꼬리를 붙여 잘라냅니다.
+
+다만 이 방식은 연결 순서가 비결정적입니다(분산 실행 특성). 
+
+
+2) 정렬까지 최대한 맞추는 워크어라운드
+
+Impala는 GROUP_CONCAT 내부 ORDER BY를 지원하지 않지만, 단일 노드 실행 + 사전 정렬된 서브쿼리로 순서를 사실상 고정하는 방법이 널리 쓰입니다.
+
+-- 1) 이 세션에서만 단일 노드로 실행(정렬 보장에 유리, 성능 주의)
+SET NUM_NODES=1;
+
+-- 2) 부서/이름으로 먼저 정렬한 뒤 집계
+WITH ordered AS (
+  SELECT deptno, ename
+  FROM emp
+  ORDER BY deptno, ename
+)
+SELECT deptno,
+       CASE
+         WHEN LENGTH(s) > 4000
+           THEN CONCAT(
+                  SUBSTR(s, 1, 4000 - LENGTH(CONCAT('... (총 ', CAST(cnt AS STRING), '개)')) ),
+                  '... (총 ', CAST(cnt AS STRING), '개)'
+                )
+         ELSE s
+       END AS employee_list
+FROM (
+  SELECT deptno,
+         COUNT(*)                  AS cnt,
+         GROUP_CONCAT(ename, ', ') AS s
+  FROM ordered
+  GROUP BY deptno
+) x;
+
+SET NUM_NODES=1로 코디네이터 단일 노드에서 처리하면, 서브쿼리의 ORDER BY가 깨질 가능성을 줄여 그룹 내 알파벳(혹은 지정) 순서를 실질적으로 맞출 수 있습니다. 운영 대용량 쿼리에는 부담이 크니 주의하세요. 
+
+커뮤니티/이슈에서도 정렬이 필요한 경우 서브쿼리 정렬을 권장합니다. 
+
+
+3) 추가 팁 (Impala 차이점)
+
+GROUP_CONCAT 결과 타입은 STRING이며, 드라이버/툴 체인에 따라 길이 메타데이터(예: 32767)나 출력 한계가 관여할 수 있습니다. 보고/엑셀 내보내기 등에서는 SUBSTR로 길이를 통제하세요. 
+
+Oracle의 4000은 바이트 기준인 반면, Impala LENGTH()는 문자열 길이로 동작합니다. 한글처럼 멀티바이트 문자를 엄격히 4000바이트에 맞추려면 여유를 두거나 애플리케이션 계층에서 바이트 길이 컷팅을 권장합니다(Impala에서 바이트 단위 정확 컷은 까다롭습니다). 
+
+
+
+---
+
+필요하시면 위 쿼리를 정렬 키를 다중 컬럼으로 바꾸거나(예: ORDER BY job, ename), 구분자/접두사를 파라미터화한 버전, 혹은 대용량에서도 분산 유지 + 순서 근사 전략으로 손봐서 드릴게요.
