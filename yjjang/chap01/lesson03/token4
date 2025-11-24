@@ -1,0 +1,113 @@
+
+네, 가능합니다!
+Grafana Service Account Token 은 생성할 때 secondsToLive 값을 주면 원하는 만료기간(Expiry)을 정확하게 설정할 수 있습니다.
+
+
+---
+
+✅ 1. 토큰 만료기간 설정 방법 (API)
+
+Grafana 25.x(=Grafana 10.x 기준)
+
+✔ secondsToLive 값으로 만료시간 지정
+
+예시: 7일(7 × 24 × 3600 = 604800초)
+
+curl -X POST \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "mytoken", "secondsToLive": 604800}' \
+  http://localhost:3000/api/serviceaccounts/7/tokens
+
+만료된 후 토큰 자동 삭제됨
+
+→ 재사용 불가
+→ 새 토큰을 만들어야 함
+
+
+---
+
+⏳ secondsToLive 변환표
+
+기간	secondsToLive
+
+1시간	3600
+12시간	43200
+1일	86400
+3일	259200
+7일	604800
+30일	2592000
+90일	7776000
+180일	15552000
+1년	31536000
+
+
+
+---
+
+🚫 만료 없음(No Expiration)
+
+영구 토큰(권장X. 유출 위험 ↑)
+
+"secondsToLive": 0
+
+
+---
+
+🔧 2. 아까 만든 자동 스크립트에도 “만료기간 설정”을 넣고 싶다면?
+
+다음처럼 입력값을 받을 수 있어요.
+
+예시) ./grafana_token.sh create 604800
+→ 7일짜리 토큰 생성
+
+수정할 부분:
+
+TTL=$2   # secondToLive 값
+
+if [[ -z "$TTL" ]]; then
+  TTL=0  # 기본값: 무제한
+fi
+
+-d "{\"name\": \"$TOKEN_NAME\", \"secondsToLive\": $TTL}"
+
+원하면 전체 스크립트에 TTL 옵션을 완벽하게 통합해서 다시 만들어줄게요.
+
+
+---
+
+🔥 3. UI에서도 만료기간 설정 가능?
+
+가능함.
+
+Grafana UI →
+Users & Teams → Service Accounts → (계정 선택) → Add token
+→ TTL 선택 가능(1h ~ 1y / custom)
+
+
+---
+
+❓ 만료기간을 어떻게 쓰면 좋나요?
+
+✔ 운영환경 추천
+
+24시간~7일: 자동 rotate 환경
+
+30일~90일: API 서버/배치용
+
+0 (무기한): 내부망/폐쇄망, 외부 노출 위험이 없을 때만
+
+
+
+---
+
+원하는 방식은?
+
+스크립트에서 TTL을 옵션으로 넣기
+
+기본 TTL을 30일로 고정
+
+만료일을 YYYY-MM-DD로도 입력 가능하게
+
+
+어떤 걸 원해? 바로 만들어줄게!
