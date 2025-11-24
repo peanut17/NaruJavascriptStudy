@@ -1,0 +1,175 @@
+
+아래는 Grafana 25.4.4.25(=Grafana 10.x 계열) 기준으로
+API Token 생성 → curl로 API 호출까지 전체 과정을 가장 정확히 정리한 방법입니다.
+
+
+---
+
+✅ 1. Grafana에서 API Token 생성하기
+
+① 로그인 후
+
+Settings(톱니바퀴 아이콘) → Users & Teams → Service Accounts 이동
+(최근 25.x 계열에서는 API Key 메뉴가 없어지고 Service Account + Token 구조로 변경됨)
+
+② Service Account 만들기
+
+New service account 클릭
+
+이름 입력: 예) api-reader
+
+Role 선택 (중요)
+
+Role	권한
+
+Viewer	대시보드 조회
+Editor	패널/대시보드 수정
+Admin	전체 관리
+
+
+
+③ Token 생성
+
+Service Account 생성 후 → Add token
+
+Token name 입력 (예: apitoken)
+
+TTL(만료 시간) 설정 or No expiration
+
+Create token
+
+
+👉 토큰 문자열을 복사해 두세요.
+(다시 못 보니 한 번만 표시됩니다.)
+
+
+---
+
+✅ 2. Curl 사용을 위한 Authorization 헤더 규칙
+
+Grafana 10.x 이상에서는
+✔ Bearer 토큰 방식만 지원
+
+-H "Authorization: Bearer <TOKEN>"
+
+
+---
+
+✅ 3. Curl로 Grafana API 호출하기
+
+📌 (1) 상태 체크 API — 간단 테스트
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://YOUR_GRAFANA_HOST/api/health
+
+예시:
+
+curl -H "Authorization: Bearer eyJrIjoiQj...AA" \
+     http://192.168.10.10:3000/api/health
+
+
+---
+
+📌 (2) 조직 정보 확인
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://YOUR_GRAFANA_HOST/api/org
+
+
+---
+
+📌 (3) 대시보드 목록 가져오기
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://YOUR_GRAFANA_HOST/api/search
+
+
+---
+
+📌 (4) 특정 대시보드 JSON 가져오기(uid 기준)
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://YOUR_GRAFANA_HOST/api/dashboards/uid/abcd1234
+
+
+---
+
+📌 (5) 알람 목록 불러오기
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://YOUR_GRAFANA_HOST/api/v1/provisioning/alert-rules
+
+
+---
+
+✅ 4. 에러가 날 때 확인할 점
+
+✔ 401 Unauthorized 발생 시
+
+토큰 문자열 뒤에 공백/줄바꿈이 섞였는지 확인
+
+curl 명령에 "Authorization: Bearer …" 빠진 경우
+
+Token이 Viewer인데 쓰기 API 요청한 경우
+
+
+✔ 403 Forbidden
+
+Role이 낮음 (Admin API를 Viewer로 호출)
+
+
+✔ 404 not found
+
+Grafana 주소/IP/Port 또는 API 경로 오타
+
+
+
+---
+
+🔥 5. 가장 많이 사용하는 실전 예시 (복사/붙여넣기 가능)
+
+대시보드 JSON 내보내기
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://localhost:3000/api/dashboards/uid/YOUR_UID \
+     -o dashboard.json
+
+폴더 목록 확인
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://localhost:3000/api/folders
+
+데이터소스 리스트 확인
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://localhost:3000/api/datasources
+
+
+---
+
+🔧 6. HTTPS Grafana 환경일 경우
+
+증명서 무시하고 호출:
+
+curl -k -H "Authorization: Bearer YOUR_TOKEN" \
+     https://your-grafana-host:3000/api/health
+
+
+---
+
+🔚 필요하면 바로 만들어드림
+
+원하면:
+
+Grafana → ClickHouse 데이터소스 자동 등록 API
+
+대시보드 자동 생성/업데이트 API 스크립트
+
+토큰 만료 자동 확인 Bash 스크립트
+
+curl → Python Requests 변환
+
+
+전부 작성해줄게.
+
+지금 어떤 API 호출을 하고 싶은지 알려줘?
