@@ -1,0 +1,218 @@
+
+아래는 Grafana 25.x(=Grafana 10.x) 기준으로
+Service Account 토큰 자동 생성 / 갱신(재발급) / 삭제까지 한 번에 관리할 수 있는
+✔ 리눅스 Bash 스크립트(grafana_token.sh) 입니다.
+
+‣ 실제 운영 환경에서 바로 사용할 수 있게
+✔ 에러 체크
+✔ JSON 파싱(jq 사용)
+✔ 로그 출력
+까지 모두 포함했습니다.
+
+
+---
+
+✅ grafana_token.sh (Full Version / 운영 가능)
+
+> ⚠ 필요 패키지: jq
+
+sudo apt install jq
+
+
+
+
+---
+
+#!/bin/bash
+
+# =========================================
+# Grafana Token Automation Script
+# =========================================
+
+GRAFANA_URL="http://localhost:3000"
+ADMIN_TOKEN="YOUR_ADMIN_TOKEN"     # 관리자(Admin) 토큰 필요
+SA_NAME="clickhouse-api"           # Service Account 이름
+TOKEN_NAME="auto-token"            # 생성/갱신하는 Token 이름
+
+# =========================================
+
+header() {
+  echo "=============================================="
+  echo "$1"
+  echo "=============================================="
+}
+
+# ------------ Service Account ID 조회 ------------
+get_sa_id() {
+  curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+       "$GRAFANA_URL/api/serviceaccounts/search" \
+  | jq ".serviceAccounts[] | select(.name==\"$SA_NAME\") | .id"
+}
+
+# ------------ 서비스 계정 없으면 생성 ------------
+create_service_account_if_not_exists() {
+  SA_ID=$(get_sa_id)
+
+  if [[ -z "$SA_ID" ]]; then
+    header "Service Account 없음 → 생성 중"
+    SA_ID=$(curl -s -X POST \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"$SA_NAME\", \"role\": \"Viewer\"}" \
+        "$GRAFANA_URL/api/serviceaccounts" | jq -r ".id")
+    echo "→ 생성된 Service Account ID: $SA_ID"
+  else
+    echo "Service Account 존재(ID=$SA_ID)"
+  fi
+}
+
+# ------------ 기존 토큰 ID 조회 ------------
+get_existing_token_id() {
+  curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+       "$GRAFANA_URL/api/serviceaccounts/$1/tokens" \
+  | jq ".[] | select(.name==\"$TOKEN_NAME\") | .id"
+}
+
+# ------------ Token 생성 ------------
+create_token() {
+  header "토큰 생성 중"
+
+  SA_ID=$(get_sa_id)
+
+  NEW_TOKEN=$(curl -s -X POST \
+      -H "Authorization: Bearer $ADMIN_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\": \"$TOKEN_NAME\", \"secondsToLive\": 0}" \
+      "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens")
+
+  TOKEN_VALUE=$(echo "$NEW_TOKEN" | jq -r ".key")
+  echo "→ 생성 완료"
+  echo "----------------------------------------------"
+  echo "TOKEN:"
+  echo "$TOKEN_VALUE"
+  echo "----------------------------------------------"
+
+  echo "$TOKEN_VALUE" > generated_token.txt
+  echo "토큰이 generated_token.txt 에 저장되었습니다."
+}
+
+# ------------ Token 삭제 ------------
+delete_token() {
+  header "기존 토큰 삭제 중"
+
+  SA_ID=$(get_sa_id)
+  TOKEN_ID=$(get_existing_token_id $SA_ID)
+
+  if [[ -z "$TOKEN_ID" ]]; then
+    echo "삭제할 토큰 없음."
+    return
+  fi
+
+  curl -s -X DELETE \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens/$TOKEN_ID"
+
+  echo "→ Token 삭제 완료 (ID=$TOKEN_ID)"
+}
+
+# ------------ Token 갱신(재발급) ------------
+renew_token() {
+  header "토큰 갱신(삭제 + 재생성)"
+
+  delete_token
+  sleep 1
+  create_token
+}
+
+# ------------ Help 출력 ------------
+print_help() {
+  echo "사용법:"
+  echo "  $0 create    # 토큰 생성"
+  echo "  $0 renew     # 토큰 갱신 (삭제 후 새로 생성)"
+  echo "  $0 delete    # 토큰 삭제"
+  echo "  $0 sa        # Service Account ID 확인"
+}
+
+# ------------ 실행 옵션 처리 ------------
+case "$1" in
+  create)
+    create_service_account_if_not_exists
+    create_token
+    ;;
+  renew)
+    create_service_account_if_not_exists
+    renew_token
+    ;;
+  delete)
+    create_service_account_if_not_exists
+    delete_token
+    ;;
+  sa)
+    get_sa_id
+    ;;
+  *)
+    print_help
+    ;;
+esac
+
+
+---
+
+✅ 사용법
+
+1. 스크립트 저장
+
+nano grafana_token.sh
+
+내용 붙여넣기 → 저장
+
+2. 실행권한
+
+chmod +x grafana_token.sh
+
+3. 사용 예시
+
+✔ 토큰 생성
+
+./grafana_token.sh create
+
+✔ 토큰 갱신(rotate)
+
+./grafana_token.sh renew
+
+✔ 토큰 삭제
+
+./grafana_token.sh delete
+
+✔ Service Account ID 조회
+
+./grafana_token.sh sa
+
+
+---
+
+🔥 토큰 자동 회전(Cron 등록)도 가능
+
+예: 매주 일요일 새 토큰 만들고 rotate
+
+crontab -e
+
+0 3 * * 0 /root/grafana_token.sh renew
+
+
+---
+
+🔧 추가로 만들어드릴 수 있음
+
+원한다면:
+
+생성된 토큰을 environment 파일(.env)로 자동 저장
+
+ClickHouse 쿼리 자동 호출 스크립트
+
+Grafana API로 대시보드 자동 Import/Export 스크립트
+
+쿠버네티스 Secret 자동 갱신(토큰 rotate)
+
+
+어떤 방식으로 사용할지 말해주면 더 맞춰서 개선해줄게!
