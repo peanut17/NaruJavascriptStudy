@@ -1,0 +1,266 @@
+
+아래는 Grafana 25.x(=Grafana 10.x) 기준으로
+API Token을 생성 / 갱신(재발급) / 삭제하는 전체 방법을 가장 정확하게 정리한 내용입니다.
+
+Grafana는 기존 “API Key” 방식이 없어지고,
+➡️ Service Account + Token 구조로 완전히 변경됨.
+
+
+---
+
+✅ 1. Service Account Token 생성(발급) 방법
+
+① Service Account 생성
+
+Grafana UI에서:
+
+1. Settings(톱니바퀴)
+
+
+2. Users & Teams
+
+
+3. Service Accounts
+
+
+4. New service account
+
+
+
+이름: clickhouse-api
+
+Role 선택:
+
+Viewer: 읽기만 필요할 때
+
+Editor: 패널/쿼리 수정 필요 시
+
+Admin: 전체 관리 (필요할 때만)
+
+
+
+② Token 생성
+
+Service Account 페이지 → Add token
+
+Token name: clickhouse-token
+
+Expires: 필요 시 No expiration
+
+Create token 클릭
+
+
+👉 생성된 토큰 문자열은 한 번만 표시됨
+꼭 복사해두어야 함.
+
+
+---
+
+🔥 2. API로 Token 생성(자동화)
+
+토큰 발급도 REST API로 가능함.
+
+Service Account ID 조회
+
+curl -H "Authorization: Bearer ADMIN_TOKEN" \
+     http://localhost:3000/api/serviceaccounts/search
+
+출력 예:
+
+{
+  "serviceAccounts": [
+    {
+      "id": 7,
+      "name": "clickhouse-api",
+      "role": "Viewer"
+    }
+  ]
+}
+
+여기서 id=7 사용.
+
+
+---
+
+✔ Token 생성 API
+
+curl -X POST \
+     -H "Authorization: Bearer ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "clickhouse-token", "secondsToLive": 0}' \
+     http://localhost:3000/api/serviceaccounts/7/tokens
+
+"secondsToLive": 0 → 만료 없음
+
+만료를 줄 경우 7일: "secondsToLive": 604800
+
+
+응답
+
+{
+  "name": "clickhouse-token",
+  "key": "eyJrIjoiQ...AAA"
+}
+
+여기서 "key" 가 실제 사용할 Bearer Token
+
+
+---
+
+🔁 3. Token 갱신(재발급) 방법
+
+Grafana는 Token을 갱신하는 API가 없음.
+👉 즉, 기존 토큰을 **Rotate(삭제 후 재발급)**하는 방식만 가능.
+
+갱신 절차:
+
+1. 기존 Token ID 조회
+
+
+2. 기존 Token 삭제
+
+
+3. 새 Token 생성
+
+
+
+
+---
+
+✔ 3-1. 기존 토큰 목록 조회
+
+curl -H "Authorization: Bearer ADMIN_TOKEN" \
+     http://localhost:3000/api/serviceaccounts/7/tokens
+
+예시 출력:
+
+[
+  {
+    "id": 12,
+    "name": "clickhouse-token",
+    "secondsToLive": 0
+  }
+]
+
+
+---
+
+✔ 3-2. Token 삭제 (갱신 시 반드시 사용)
+
+curl -X DELETE \
+     -H "Authorization: Bearer ADMIN_TOKEN" \
+     http://localhost:3000/api/serviceaccounts/7/tokens/12
+
+tokens/12 → 삭제할 Token ID
+
+
+---
+
+✔ 3-3. 새 Token 재발급
+
+위의 Token 생성 API 다시 실행
+
+
+---
+
+🗑 4. Token 삭제 방법 (UI)
+
+Grafana UI →
+Users & Teams → Service Accounts → 해당 계정 → Tokens → Delete
+
+
+---
+
+🗑 5. Token 삭제 방법 (API)
+
+Token ID 확인 후:
+
+curl -X DELETE \
+     -H "Authorization: Bearer ADMIN_TOKEN" \
+     http://localhost:3000/api/serviceaccounts/7/tokens/12
+
+
+---
+
+📌 6. Token 사용해서 ClickHouse 데이터 불러오기(curl)
+
+Grafana ClickHouse Plugin 설치 후,
+테스트 겸 간단한 쿼리를 API로 불러오려면:
+
+(1) Flux/JSON Query API 사용
+
+Grafana 공식 Query API 경로:
+
+/api/ds/query
+
+(2) 데이터소스 ID 확인
+
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+     http://localhost:3000/api/datasources
+
+출력 예:
+
+[
+  {
+    "id": 4,
+    "uid": "clickhouse",
+    "type": "grafana-clickhouse-datasource"
+  }
+]
+
+여기서 데이터소스 ID는 4
+
+
+---
+
+(3) ClickHouse 데이터 조회 요청
+
+curl -X POST \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "queries": [
+          {
+            "datasourceId": 4,
+            "rawSql": "SELECT number FROM system.numbers LIMIT 5",
+            "format": "table"
+          }
+        ]
+      }' \
+  http://localhost:3000/api/ds/query
+
+응답 예시
+
+{
+  "results": {
+    "A": {
+      "frames": [
+        {
+          "schema": {...},
+          "data": {
+            "values": [[0,1,2,3,4]]
+          }
+        }
+      ]
+    }
+  }
+}
+
+즉, Grafana Token → API → ClickHouse 쿼리 수행
+모두 정상 동작!
+
+
+---
+
+🔥 필요하면 자동화 스크립트도 만들어드립니다
+
+토큰 자동 생성/삭제 Bash 스크립트
+
+Token 회전(rotate) 자동화
+
+ClickHouse 쿼리 자동화 스크립트
+
+Impala / Spark / Kafka 통합 API 스크립트
+
+
+원하면 바로 만들어줄게.
