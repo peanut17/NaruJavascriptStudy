@@ -1,0 +1,159 @@
+
+좋아, 이번엔 여러 테이블을 대상으로 “일 단위 파티션”을 90일 기준으로 자동 드랍하는 스크립트로 가볼게.
+
+아래 스크립트는:
+
+여러 테이블을 배열로 넣어두고
+
+system.parts에서 90일 이전 파티션만 골라
+
+그에 대한 ALTER TABLE ... DROP PARTITION ...; 쿼리를 자동 생성해서 실행하는 방식이야.
+
+일 단위 파티션(예: PARTITION BY toYYYYMMDD(toDateTime(occr_dt, ...)) 같은 구조)일 때 잘 맞는 패턴이야.
+
+
+
+---
+
+1️⃣ 전제 (daily partition)
+
+테이블이 대략 이런 식으로 되어 있다고 가정할게:
+
+CREATE TABLE your_db.your_table
+(
+    occr_dt String  -- 'YYYYMMDDhhmmss' 형식
+    -- 기타 컬럼...
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(toDateTime(occr_dt, 'UTC'))
+ORDER BY (...)
+;
+
+위처럼 PARTITION BY가 toYYYYMMDD(...) 형식이면
+system.parts.partition에는 20251101처럼 YYYYMMDD 숫자 형태 문자열이 들어가고,
+ALTER TABLE ... DROP PARTITION 20251101 이런 식으로 지우는 구조야.
+
+
+---
+
+2️⃣ 여러 테이블 daily partition 드랍 쉘 스크립트
+
+/app/scripts/ch_drop_old_partitions.sh 같은 파일로 저장해두면 좋아.
+
+#!/bin/bash
+
+# ClickHouse 접속 정보
+CH_HOST="localhost"
+CH_PORT="9000"
+CH_USER="default"
+CH_PASS=""           # 있으면 입력
+CH_OPTS="--host=${CH_HOST} --port=${CH_PORT} --user=${CH_USER} --password=${CH_PASS}"
+
+# 며칠 이전 파티션까지 드랍할지 (기본 90일 이전)
+DAYS=90
+
+# 대상 테이블 목록 (db.table 형식)
+TABLES=(
+  "your_db.table1"
+  "your_db.table2"
+  "your_db.table3"
+)
+
+# 로그 파일
+LOG_FILE="/var/log/ch_drop_daily_partitions.log"
+
+echo "==================================================" >> "$LOG_FILE"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - START partition drop (DAYS=$DAYS)" >> "$LOG_FILE"
+
+for T in "${TABLES[@]}"; do
+  DB="${T%%.*}"
+  TB="${T#*.}"
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking $DB.$TB" >> "$LOG_FILE"
+
+  # 90일 이전 파티션에 대한 DROP 쿼리를 생성
+  # system.parts.min_time 기준으로 DAYS 이전 파티션만 선택
+  SQL_GENERATE="
+    SELECT DISTINCT
+      'ALTER TABLE ' || database || '.' || table || ' DROP PARTITION ' ||
+      -- partition 값이 '2025-11-01' 같은 Date형 문자열일 수도 있어
+      -- 그런 경우 quote()를 써서 '2025-11-01' 리터럴로 만들어줌
+      (CASE
+        WHEN partition LIKE '%-%' THEN quote(partition)
+        ELSE partition
+       END) || ';'
+    FROM system.parts
+    WHERE database = '${DB}'
+      AND table = '${TB}'
+      AND active
+      AND toDate(min_time) < today() - INTERVAL ${DAYS} DAY
+    ORDER BY partition;
+  "
+
+  # 생성된 DROP PARTITION 쿼리들 가져오기
+  CMDS=$(clickhouse-client $CH_OPTS --query="$SQL_GENERATE")
+
+  if [[ -z "$CMDS" ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - No old partitions for $DB.$TB" >> "$LOG_FILE"
+    continue
+  fi
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Will execute:" >> "$LOG_FILE"
+  echo "$CMDS" >> "$LOG_FILE"
+
+  # 실제 파티션 드랍 실행
+  echo "$CMDS" | clickhouse-client $CH_OPTS >> "$LOG_FILE" 2>&1
+
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - END partition drop" >> "$LOG_FILE"
+echo "==================================================" >> "$LOG_FILE"
+
+🔧 사용 방법
+
+chmod +x /app/scripts/ch_drop_old_partitions.sh
+
+# 수동 실행
+/app/scripts/ch_drop_old_partitions.sh
+
+
+---
+
+3️⃣ 크론에 등록 (예: 매일 새벽 4시 실행)
+
+crontab -e
+
+아래 한 줄 추가 (스크립트 경로는 네 환경에 맞게):
+
+0 4 * * * /app/scripts/ch_drop_old_partitions.sh >> /var/log/ch_drop_daily_partitions.cron.log 2>&1
+
+
+---
+
+4️⃣ occr_dt 기반으로 정확히 daily partition인 경우 (응용)
+
+만약 네가 테이블을 이렇게 만들어놨다면:
+
+PARTITION BY toYYYYMMDD(toDateTime(occr_dt, 'Asia/Seoul'))
+
+그렇다면 partition 값은 항상 YYYYMMDD 형태고, 위 스크립트 로직 그대로 잘 동작해.
+추가로 “90일 이전 = occr_dt 날짜 기준” 으로 정확히 맞추고 싶다면:
+
+toDate(min_time) 대신,
+
+toDate(substring(occr_dt, 1, 8))를 쓰는 전용 관리 테이블/뷰를 만들어서 시스템 파트와 조합하는 방식도 가능해.
+
+
+하지만 일반 운영에서는 성능 때문에 system.parts.min_time 기준으로 삭제하는 방식이 가장 실용적이라서 위 방식을 추천해.
+
+
+---
+
+원하면:
+
+DAYS를 파라미터로 받아서 ./ch_drop_old_partitions.sh 120 이런 식으로 쓰는 버전,
+
+특정 패턴으로 시작하는 테이블만 자동 조회해서 돌리는 버전(예: ai_log_*)
+
+
+도 바로 만들어 줄게.
