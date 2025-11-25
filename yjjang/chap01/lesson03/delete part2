@@ -1,0 +1,110 @@
+
+파라미터로 DAYS를 받는 버전으로 바꿔서 보여줄게.
+(인자 없으면 기본 90일, 숫자만 받도록 간단 검증도 넣었어.)
+
+
+---
+
+🔧 ch_drop_old_partitions.sh (DAYS 파라미터 버전)
+
+#!/bin/bash
+
+########################################
+# 사용법:
+#   ./ch_drop_old_partitions.sh          # 기본 90일 이전 파티션 삭제
+#   ./ch_drop_old_partitions.sh 120      # 120일 이전 파티션 삭제
+########################################
+
+# 1. DAYS 파라미터 처리 (기본값 90)
+if [[ -z "$1" ]]; then
+  DAYS=90
+else
+  # 숫자인지 간단 체크
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "Usage: $0 [DAYS]"
+    echo "  DAYS는 숫자여야 합니다. 예: $0 90"
+    exit 1
+  fi
+  DAYS="$1"
+fi
+
+# 2. ClickHouse 접속 정보
+CH_HOST="localhost"
+CH_PORT="9000"
+CH_USER="default"
+CH_PASS=""           # 비밀번호 있으면 입력
+CH_OPTS="--host=${CH_HOST} --port=${CH_PORT} --user=${CH_USER} --password=${CH_PASS}"
+
+# 3. 대상 테이블 목록 (db.table 형식)
+TABLES=(
+  "your_db.table1"
+  "your_db.table2"
+  "your_db.table3"
+)
+
+# 4. 로그 파일
+LOG_FILE="/var/log/ch_drop_daily_partitions.log"
+
+echo "==================================================" >> "$LOG_FILE"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - START partition drop (DAYS=$DAYS)" >> "$LOG_FILE"
+
+for T in "${TABLES[@]}"; do
+  DB="${T%%.*}"
+  TB="${T#*.}"
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking $DB.$TB" >> "$LOG_FILE"
+
+  # 5. DAYS일 이전 파티션에 대한 DROP 쿼리 생성
+  SQL_GENERATE="
+    SELECT DISTINCT
+      'ALTER TABLE ' || database || '.' || table || ' DROP PARTITION ' ||
+      (CASE
+        WHEN partition LIKE '%-%' THEN quote(partition)  -- '2025-11-01' 같은 경우
+        ELSE partition                                   -- '20251101' 같은 경우
+       END) || ';'
+    FROM system.parts
+    WHERE database = '${DB}'
+      AND table = '${TB}'
+      AND active
+      AND toDate(min_time) < today() - INTERVAL ${DAYS} DAY
+    ORDER BY partition;
+  "
+
+  # 생성된 DROP PARTITION 쿼리들 가져오기
+  CMDS=$(clickhouse-client $CH_OPTS --query="$SQL_GENERATE")
+
+  if [[ -z "$CMDS" ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - No old partitions for $DB.$TB" >> "$LOG_FILE"
+    continue
+  fi
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Will execute:" >> "$LOG_FILE"
+  echo "$CMDS" >> "$LOG_FILE"
+
+  # 실제 파티션 드랍 실행
+  echo "$CMDS" | clickhouse-client $CH_OPTS >> "$LOG_FILE" 2>&1
+
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - END partition drop" >> "$LOG_FILE"
+echo "==================================================" >> "$LOG_FILE"
+
+
+---
+
+✅ 사용 예시
+
+chmod +x ch_drop_old_partitions.sh
+
+# 기본 90일 이전 파티션 삭제
+./ch_drop_old_partitions.sh
+
+# 120일 이전 파티션 삭제
+./ch_drop_old_partitions.sh 120
+
+크론에 넣을 때도 이렇게 조정 가능해요:
+
+# 매일 새벽 4시, 90일 이전 삭제
+0 4 * * * /app/scripts/ch_drop_old_partitions.sh 90 >> /var/log/ch_drop_daily_partitions.cron.log 2>&1
+
+원하면 TABLES 배열을 system.tables에서 패턴으로 자동 조회하는 버전(예: ai_log_%만)도 만들어 줄게.
