@@ -1,0 +1,1741 @@
+{
+  "name": "썰_쇼츠_자동화",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $('영상_행_가져오기').item.json.ID }}",
+            "narration": "={{ $json.webContentLink }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hook_text",
+              "displayName": "hook_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "full_text",
+              "displayName": "full_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-01",
+              "displayName": "scene-01",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-02",
+              "displayName": "scene-02",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-03",
+              "displayName": "scene-03",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-04",
+              "displayName": "scene-04",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-05",
+              "displayName": "scene-05",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-06",
+              "displayName": "scene-06",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-07",
+              "displayName": "scene-07",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-08",
+              "displayName": "scene-08",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-09",
+              "displayName": "scene-09",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-10",
+              "displayName": "scene-10",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-11",
+              "displayName": "scene-11",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "gender",
+              "displayName": "gender",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "narration",
+              "displayName": "narration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "bgm",
+              "displayName": "bgm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "comment_inducing_question",
+              "displayName": "comment_inducing_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -320,
+        432
+      ],
+      "id": "2947b994-39b2-4094-a401-d080d75e5ae1",
+      "name": "시트_음성_저장",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u4GzrhfE0jbPTRjC",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "={{ \"narration-\" + $('영상_행_생성').item.json.ID }}.{{ $input.item.binary.data.fileName.split(\".\")[1] }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('폴더_생성').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -544,
+        432
+      ],
+      "id": "ab06e1cb-283c-4f10-b2c7-6d0763012ee3",
+      "name": "드라이브_음성_저장",
+      "retryOnFail": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "vn7BdgXGsHm7RzcU",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "쇼츠 자동 생성기",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "커뮤니티 글",
+              "placeholder": "커뮤니티 글이나 주제를 입력하세요."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -2560,
+        288
+      ],
+      "id": "3b095bec-4728-4b18-84b3-b4caef28cbeb",
+      "name": "On form submission1",
+      "webhookId": "7bd8d875-8f81-43d1-8103-48bb5445dc37"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10) }}",
+            "created_at": "={{ DateTime.now().format('yyyy-MM-dd-hh-mm-ss') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hook_text",
+              "displayName": "hook_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_text",
+              "displayName": "full_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-01",
+              "displayName": "scene-01",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-02",
+              "displayName": "scene-02",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-03",
+              "displayName": "scene-03",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-04",
+              "displayName": "scene-04",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-05",
+              "displayName": "scene-05",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-06",
+              "displayName": "scene-06",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-07",
+              "displayName": "scene-07",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-08",
+              "displayName": "scene-08",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-09",
+              "displayName": "scene-09",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-10",
+              "displayName": "scene-10",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-11",
+              "displayName": "scene-11",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gender",
+              "displayName": "gender",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "narration",
+              "displayName": "narration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bgm",
+              "displayName": "bgm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comment_inducing_question",
+              "displayName": "comment_inducing_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2336,
+        288
+      ],
+      "id": "18c823af-1b49-4802-84cd-286c19d61488",
+      "name": "영상_행_생성",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u4GzrhfE0jbPTRjC",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ID",
+              "lookupValue": "={{ $json.ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2112,
+        288
+      ],
+      "id": "55c2c5dc-461d-401c-b892-d4f5b640234b",
+      "name": "영상_행_가져오기",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u4GzrhfE0jbPTRjC",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $json.ID }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1aYkXRC9iWN9PCfpRgG7u_Jpmzh8wiAkm",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1aYkXRC9iWN9PCfpRgG7u_Jpmzh8wiAkm"
+        },
+        "options": {
+          "folderColorRgb": "#c1b5f1"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1888,
+        288
+      ],
+      "id": "f74001f7-b04d-46e6-b660-fd76dfd9c17a",
+      "name": "폴더_생성",
+      "retryOnFail": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "vn7BdgXGsHm7RzcU",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "share",
+        "folderNoRootId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "permissionsUi": {
+          "permissionsValues": {
+            "role": "reader",
+            "type": "anyone",
+            "allowFileDiscovery": true
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1664,
+        288
+      ],
+      "id": "f0da9f13-6c27-49ec-b2ac-268e8853beb8",
+      "name": "폴더_공유하기",
+      "retryOnFail": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "vn7BdgXGsHm7RzcU",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"썸네일용 짧은 제목 (10자 이내)\"\n    },\n    \"hook_text\": {\n      \"type\": \"string\",\n      \"description\": \"썸네일 자막용 짧은 문구 (15자 이내)\"\n    },\n    \"gender\": {\n      \"type\": \"string\",\n      \"description\": \"나레이션할 성우의 성별 (예: 남성, 여성)\",\n      \"enum\": [\"남성\", \"여성\"]\n    },\n    \"script\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"full_text\": {\n          \"type\": \"string\",\n          \"description\": \"전체 대본 (반드시 290자 이내, 30초 분량)\"\n        }\n      },\n      \"required\": [\"full_text\"]\n    },\n    \"image_prompts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"frame_number\": {\n            \"type\": \"integer\",\n            \"description\": \"프레임 번호 (1-8)\"\n          },\n          \"scene_description\": {\n            \"type\": \"string\",\n            \"description\": \"장면 설명 (한국어)\"\n          },\n          \"prompt\": {\n            \"type\": \"string\",\n            \"description\": \"이미지 생성 프롬프트 (영어)\"\n          },\n          \"character\": {\n            \"type\": \"string\",\n            \"description\": \"등장 캐릭터 (female/male/both/none)\"\n          },\n          \"emotion\": {\n            \"type\": \"string\",\n            \"description\": \"캐릭터 감정\"\n          },\n          \"background_color\": {\n            \"type\": \"string\",\n            \"description\": \"배경색 (예: soft pink, cream)\"\n          }\n        },\n        \"required\": [\"frame_number\", \"scene_description\", \"prompt\", \"character\", \"emotion\", \"background_color\"]\n      },\n      \"minItems\": 8,\n      \"maxItems\": 8\n    },\n    \"metadata\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"category\": {\n          \"type\": \"string\",\n          \"description\": \"카테고리\"\n        },\n        \"target_emotion\": {\n          \"type\": \"string\",\n          \"description\": \"유발할 감정\"\n        },\n        \"comment_inducing_question\": {\n          \"type\": \"string\",\n          \"description\": \"댓글 유도 질문\"\n        }\n      },\n      \"required\": [\"category\", \"target_emotion\", \"comment_inducing_question\"]\n    }\n  },\n  \"required\": [\"title\", \"hook_text\", \"gender\", \"script\", \"image_prompts\", \"metadata\"]\n}",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -1360,
+        304
+      ],
+      "id": "fc697bb7-5aa5-4ff4-91b0-902d4c76d765",
+      "name": "대본_형식"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1376,
+        512
+      ],
+      "id": "b03881ad-2384-497d-8fc6-717f6115a305",
+      "name": "Gemini_2.5_Pro",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "x6LqgU0qa7nRKO9J",
+          "name": "senugw0u@gmail.com 260112-shorts-automation"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output.image_prompts",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        16
+      ],
+      "id": "311381c8-392f-4736-9882-eeefd9c92664",
+      "name": "이미지_프롬프트_스플릿",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $('영상_행_생성').item.json.ID }}",
+            "title": "={{ $('대본_생성기').item.json.output.title }}",
+            "full_text": "={{ $('대본_생성기').item.json.output.script.full_text }}",
+            "hook_text": "={{ $('대본_생성기').item.json.output.hook_text }}",
+            "comment_inducing_question": "={{ $('대본_생성기').item.json.output.metadata.comment_inducing_question }}",
+            "scene-01": "={{ $json.data[0].webContentLink }}",
+            "scene-02": "={{ $json.data[1].webContentLink }}",
+            "scene-03": "={{ $json.data[2].webContentLink }}",
+            "scene-04": "={{ $json.data[3].webContentLink }}",
+            "scene-05": "={{ $json.data[4].webContentLink }}",
+            "scene-06": "={{ $json.data[5].webContentLink }}",
+            "scene-07": "={{ $json.data[6].webContentLink }}",
+            "scene-08": "={{ $json.data[7].webContentLink }}",
+            "scene-09": "=",
+            "scene-10": "=",
+            "scene-11": "="
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hook_text",
+              "displayName": "hook_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_text",
+              "displayName": "full_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scene-01",
+              "displayName": "scene-01",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-02",
+              "displayName": "scene-02",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-03",
+              "displayName": "scene-03",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-04",
+              "displayName": "scene-04",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-05",
+              "displayName": "scene-05",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-06",
+              "displayName": "scene-06",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-07",
+              "displayName": "scene-07",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-08",
+              "displayName": "scene-08",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-09",
+              "displayName": "scene-09",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-10",
+              "displayName": "scene-10",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "scene-11",
+              "displayName": "scene-11",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "gender",
+              "displayName": "gender",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "narration",
+              "displayName": "narration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bgm",
+              "displayName": "bgm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "comment_inducing_question",
+              "displayName": "comment_inducing_question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -112,
+        48
+      ],
+      "id": "69a84f65-4c92-483d-9e34-3c1773388c87",
+      "name": "행_장면_업데이트",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u4GzrhfE0jbPTRjC",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash-image",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash-image (Nano Banana)"
+        },
+        "prompt": "={\n  scene_description: \"{{ $json.scene_description }}\",\n  prompt: \"{{ $json.prompt }}\",\n  character: \"{{ $json.character }}\",\n  emotion: \"{{ $json.emotion }}\",\n  background_color: \"{{ $json.background_color }}\"\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        -176
+      ],
+      "id": "bf81ffb8-3feb-4cfa-a34f-2186ecf600e3",
+      "name": "장면_생성",
+      "retryOnFail": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "x6LqgU0qa7nRKO9J",
+          "name": "senugw0u@gmail.com 260112-shorts-automation"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "={{ \"scene-\" + $('Loop Over Items').item.json.frame_number }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('폴더_생성').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -320,
+        -160
+      ],
+      "id": "6d95f53f-9238-4d6c-81a6-acd960078649",
+      "name": "장면_업로드",
+      "retryOnFail": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "vn7BdgXGsHm7RzcU",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        16
+      ],
+      "id": "c4867433-28c1-4ef9-82ad-188394ba1efb",
+      "name": "장면_모으기",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        112,
+        288
+      ],
+      "id": "ac564ba3-918e-40f6-8f7f-a1fd90b5639d",
+      "name": "작업_기다리기",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        336,
+        288
+      ],
+      "id": "bbca32a8-c107-44bb-bc0f-4a2c81551567",
+      "name": "Limit",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -768,
+        16
+      ],
+      "id": "8b972409-b903-4acd-86bc-d0d67d6d1875",
+      "name": "Loop Over Items",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=당신은 유튜브 쇼츠 썰 채널 전문 작가입니다.\n커뮤니티 글이나 주제를 받으면 **속도감 있는 30초 분량(이미지 8컷)의 썰 대본**과 **8개의 이미지 프롬프트**를 생성합니다.\n\n<커뮤니티 글>\n{{ $('On form submission1').item.json[\"커뮤니티 글\"] }}\n</커뮤니티 글>\n\n## 역할\n- 원본 소재를 각색하여 새로운 스토리로 재창작\n- **빠른 템포**로 시청자의 이탈을 막는 대본 작성\n- 치비/모에 스타일의 이미지 프롬프트 생성 (총 8장)\n\n## 대본 작성 규칙\n\n### 분량 및 속도 규칙 (Speedy!)\n- 전체 대본은 **240~260자 내외**로 작성한다. (짧고 굵게)\n- **성우 성별(gender)**을 반드시 지정해야 한다. (남성/여성)\n- 총 **30초**를 넘기지 않도록 호흡을 짧게 가져간다.\n- 8개의 씬(Scene)을 사용하되, 컷 전환을 빠르게 한다. (컷당 약 3.5초)\n\n### 필수 포함 요소\n- **감정 리액션**: \"헐\", \"미친\", \"대박\" 등 짧은 감탄사 3회 이상.\n- **추임새**: \"아니 근데\", \"솔직히\" 등 문장 연결어 2회 이상.\n- 문장은 길게 늘어쓰지 말고 단문으로 끊어 칠 것.\n\n### 구조 (총 30초 / 8컷)\n1. **후킹 (Scene 1-2)**: 0-7초 (강렬한 한 마디)\n2. **상황/전개 (Scene 3-5)**: 7-18초 (빠른 사건 진행)\n3. **절정/위기 (Scene 6-7)**: 18-25초 (긴장감 최고조)\n4. **결말 (Scene 8)**: 25-30초 (짧은 반전 또는 허탈함)\n\n## 이미지 프롬프트 규칙\n- **일관성**: Scene 1~8까지 캐릭터 외형 유지.\n- **스타일**: Chibi anime style, Moe aesthetic, Soft pastel background.\n- **배경**: 텍스트 금지, 상황에 따른 배경 (일관성 유지)\n\n## 출력 형식\n반드시 지정된 JSON 형식으로만 출력하세요.\n\n<output_example>\n{\n  \"title\": \"남친의 여사친\",\n  \"hook_text\": \"이게 친구냐?\",\n  \"gender\": \"여성\",\n  \"script\": {\n    \"full_text\": \"새벽 2시, 남친 폰이 울림. 아니 근데 여사친이 ‘자?’ 이러는 거야. 헐. 스피커폰 켰더니 ‘나 방금 헤어졌어… 위로해줘’ 미친. 내가 쳐다보니까 남친이 딱 잘라 말함. ‘지금 여친 옆이야.’ 대박, 바로 뚝 끊김. 솔직히 이건 선 넘지. 난 차단 누르라 했음. 너네는 이런 거 가능?\",\n  },\n  \"image_prompts\": [\n    { \"frame_number\": 1, \"scene_description\": \"새벽에 울리는 핸드폰과 놀란 여자\", \"prompt\": \"Chibi anime girl startled by buzzing smartphone, 2am clock visible, dark pastel bedroom, no text\", \"character\": \"female\", \"emotion\": \"surprised\", \"background_color\": \"dark blue\" },\n    { \"frame_number\": 2, \"scene_description\": \"여사친 전화에 의심 가득한 눈빛\", \"prompt\": \"Chibi anime girl glaring at phone with suspicious eyes, arms crossed, soft purple background, no text\", \"character\": \"female\", \"emotion\": \"suspicious\", \"background_color\": \"soft purple\" },\n    { \"frame_number\": 3, \"scene_description\": \"스피커폰 켜고 듣는 장면\", \"prompt\": \"Chibi anime girl leaning toward speakerphone, tense listening pose, soft yellow background, no text\", \"character\": \"female\", \"emotion\": \"tense\", \"background_color\": \"soft yellow\" },\n    { \"frame_number\": 4, \"scene_description\": \"충격받아 굳는 표정\", \"prompt\": \"Chibi anime girl shocked, jaw dropped, wide eyes, soft grey background, no text\", \"character\": \"female\", \"emotion\": \"shocked\", \"background_color\": \"soft grey\" },\n    { \"frame_number\": 5, \"scene_description\": \"분노로 얼굴 붉어진 여자\", \"prompt\": \"Chibi anime girl red face, steam puff, angry expression, soft red background, no text\", \"character\": \"female\", \"emotion\": \"angry\", \"background_color\": \"soft red\" },\n    { \"frame_number\": 6, \"scene_description\": \"남친이 단호하게 말하는 순간\", \"prompt\": \"Chibi anime boy holding phone speaking firmly, girl beside him glaring, soft mint background, no text\", \"character\": \"both\", \"emotion\": \"serious\", \"background_color\": \"soft mint\" },\n    { \"frame_number\": 7, \"scene_description\": \"전화가 끊겨 멍해진 장면\", \"prompt\": \"Chibi anime girl frozen, blank stare, awkward silence mood, soft cream background, no text\", \"character\": \"female\", \"emotion\": \"speechless\", \"background_color\": \"soft cream\" },\n    { \"frame_number\": 8, \"scene_description\": \"차단을 누르고 시청자에게 묻는 포즈\", \"prompt\": \"Chibi anime girl pressing block button, then pointing at viewer, questioning eyes, soft pink background, no text\", \"character\": \"female\", \"emotion\": \"asking\", \"background_color\": \"soft pink\" }\n  ],\n  \"metadata\": {\n    \"category\": \"연애\",\n    \"target_emotion\": \"공감/분노\",\n    \"comment_inducing_question\": \"너네는 여사친 새벽 전화, 가능?\"\n  }\n}\n</output_example>",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -1440,
+        80
+      ],
+      "id": "c874faed-80d0-4929-ad6e-3194585b47f2",
+      "name": "대본_생성기",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1456,
+        160
+      ],
+      "id": "f8b32d89-5616-4773-a275-fb3646aff169",
+      "name": "편집된_영상_가져오기2",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('행_데이터_가져오기2').item.json.hook_text }}",
+        "regionCode": "KR",
+        "categoryId": "24",
+        "options": {
+          "description": "구독과 좋아요는 썰 보따리 채널에게 큰 힘이 됩니다!",
+          "tags": "#shorts #쇼츠 #썰 #썰사연 #연애 #이별"
+        }
+      },
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        160
+      ],
+      "id": "2d3d97ed-bfee-4e49-9e88-2c031f14ab6f",
+      "name": "유튜브_업로드2",
+      "retryOnFail": true,
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "aK0XivB9oLNZmIWQ",
+          "name": "YouTube account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM",
+          "mode": "list",
+          "cachedResultName": "썰 쇼츠 자동화",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VMdVSL-fiEKuRrbivOY5mr-y_QwiGPmNCgEDhXzbvCM/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ID",
+              "lookupValue": "={{ $json.ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        560,
+        288
+      ],
+      "id": "73e76c0a-18bd-4fb8-816a-6d3ac2c54c86",
+      "name": "행_데이터_가져오기2",
+      "retryOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u4GzrhfE0jbPTRjC",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0b6dea03-8c8f-40ce-bbeb-eb2f03d627f7",
+              "leftValue": "={{ $json.output.gender.trim() }}",
+              "rightValue": "남자",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -992,
+        432
+      ],
+      "id": "e12818cb-1db0-41ba-bf6a-c73197867fb6",
+      "name": "남자인지_확인",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "voice": {
+          "__rl": true,
+          "value": "7c56c6a6471a12816604f0",
+          "mode": "list",
+          "cachedResultName": "Ariel (ar, bg, cs, da, de, el, en, es, et, fi, fr, hi, hu, id, it, ja, ko, nl, pl, pt, ro, ru, vi)"
+        },
+        "text": "={{ $json.output.script.full_text }}",
+        "additionalOptions": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-supertone.supertone",
+      "typeVersion": 1,
+      "position": [
+        -768,
+        528
+      ],
+      "id": "90971003-13cc-45d9-87a8-b379686c6671",
+      "name": "여자",
+      "retryOnFail": true,
+      "credentials": {
+        "supertoneApi": {
+          "id": "kC8BvcBKaMNmVHLH",
+          "name": "Supertone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "voice": {
+          "__rl": true,
+          "value": "257ff27e0d5377b184cb16",
+          "mode": "list",
+          "cachedResultName": "Bin (ar, bg, cs, da, de, el, en, es, et, fi, fr, hi, hu, id, it, ja, ko, nl, pl, pt, ro, ru, vi)"
+        },
+        "text": "={{ $json.output.script.full_text }}",
+        "additionalOptions": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-supertone.supertone",
+      "typeVersion": 1,
+      "position": [
+        -768,
+        336
+      ],
+      "id": "03261b1d-5f7b-4a50-8905-bd1e882d1638",
+      "name": "남자",
+      "retryOnFail": true,
+      "credentials": {
+        "supertoneApi": {
+          "id": "g9qpUUeGQOxlwfIL",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -112,
+        -160
+      ],
+      "id": "2db33995-3436-410e-a8eb-1b12bfe5f913",
+      "name": "5초_대기",
+      "webhookId": "7eae9510-6e64-43a1-a7f1-ea4fe8575e47"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1456,
+        384
+      ],
+      "id": "5d8b4ee7-b7f3-4249-8d7f-8042a57889b0",
+      "name": "30초_대기",
+      "webhookId": "867f5c09-cc11-4eb3-b2c0-b613771e8697"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "650cc1c3-7b4f-49cf-a764-dc7cf8b38e1b",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "succeeded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1232,
+        208
+      ],
+      "id": "ba59e773-1bd9-4168-b154-4e52f3f407d9",
+      "name": "성공",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "templateId": "9fddd797-9208-417e-b5cd-11458ea19765",
+        "modifications": "={\n  \"narration.source\": \"{{ $json.narration }}\",\n  \"scene-1.source\": \"{{ $json['scene-01'] }}\",\n  \"scene-1.time\": 0,\n  \"scene-1.duration\": 3.5,\n  \"scene-2.source\": \"{{ $json['scene-02'] }}\",\n  \"scene-2.time\": null,\n  \"scene-2.duration\": 3.5,\n  \"scene-3.source\": \"{{ $json['scene-03'] }}\",\n  \"scene-3.time\": null,\n  \"scene-3.duration\": 3.5,\n  \"scene-4.source\": \"{{ $json['scene-04'] }}\",\n  \"scene-4.time\": null,\n  \"scene-4.duration\": 3.5,\n  \"scene-5.source\": \"{{ $json['scene-05'] }}\",\n  \"scene-5.time\": null,\n  \"scene-5.duration\": 3.5,\n  \"scene-6.source\": \"{{ $json['scene-06'] }}\",\n  \"scene-6.time\": null,\n  \"scene-6.duration\": 3.5,\n  \"scene-7.source\": \"{{ $json['scene-07'] }}\",\n  \"scene-7.time\": null,\n  \"scene-7.duration\": 3.5,\n  \"scene-8.source\": \"{{ $json['scene-08'] }}\",\n  \"scene-8.time\": null,\n  \"scene-8.duration\": null,\n  \"제목.text\": \"{{ $json.title }}\",\n  \"게시글-설명.text\": \"ㅇㅇ | {{ $now.format('hh:mm') }} | {{'조회수 ' + Math.round(Math.random() * 100000000000).toLocaleString('ko-KR') + '회' }}\"\n}",
+        "additionalOptions": {}
+      },
+      "type": "n8n-nodes-creatomate.creatomate",
+      "typeVersion": 1,
+      "position": [
+        784,
+        288
+      ],
+      "id": "7441ded2-8341-436f-9a88-b46fb612b327",
+      "name": "영상_생성",
+      "retryOnFail": true,
+      "credentials": {
+        "creatomateApi": {
+          "id": "5CN1YXESJrT5Tqgd",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getStatus",
+        "renderId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-creatomate.creatomate",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        288
+      ],
+      "id": "fa726c4a-70b1-46aa-bad0-f4a934456ce3",
+      "name": "영상_확인",
+      "retryOnFail": true,
+      "credentials": {
+        "creatomateApi": {
+          "id": "5CN1YXESJrT5Tqgd",
+          "name": "senugw0u@gmail.com"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "시트_음성_저장": {
+      "main": [
+        [
+          {
+            "node": "작업_기다리기",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "드라이브_음성_저장": {
+      "main": [
+        [
+          {
+            "node": "시트_음성_저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission1": {
+      "main": [
+        [
+          {
+            "node": "영상_행_생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "영상_행_생성": {
+      "main": [
+        [
+          {
+            "node": "영상_행_가져오기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "영상_행_가져오기": {
+      "main": [
+        [
+          {
+            "node": "폴더_생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "폴더_생성": {
+      "main": [
+        [
+          {
+            "node": "폴더_공유하기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "폴더_공유하기": {
+      "main": [
+        [
+          {
+            "node": "대본_생성기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대본_형식": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "대본_생성기",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini_2.5_Pro": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "대본_형식",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "대본_생성기",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "이미지_프롬프트_스플릿": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "행_장면_업데이트": {
+      "main": [
+        [
+          {
+            "node": "작업_기다리기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "장면_생성": {
+      "main": [
+        [
+          {
+            "node": "장면_업로드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "장면_업로드": {
+      "main": [
+        [
+          {
+            "node": "5초_대기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "장면_모으기": {
+      "main": [
+        [
+          {
+            "node": "행_장면_업데이트",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "작업_기다리기": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "행_데이터_가져오기2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "장면_모으기",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "장면_생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대본_생성기": {
+      "main": [
+        [
+          {
+            "node": "남자인지_확인",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "이미지_프롬프트_스플릿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "편집된_영상_가져오기2": {
+      "main": [
+        [
+          {
+            "node": "유튜브_업로드2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "행_데이터_가져오기2": {
+      "main": [
+        [
+          {
+            "node": "영상_생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "남자인지_확인": {
+      "main": [
+        [
+          {
+            "node": "남자",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "여자",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "여자": {
+      "main": [
+        [
+          {
+            "node": "드라이브_음성_저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "남자": {
+      "main": [
+        [
+          {
+            "node": "드라이브_음성_저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5초_대기": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "30초_대기": {
+      "main": [
+        [
+          {
+            "node": "영상_확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "성공": {
+      "main": [
+        [
+          {
+            "node": "편집된_영상_가져오기2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "30초_대기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "영상_생성": {
+      "main": [
+        [
+          {
+            "node": "영상_확인",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "영상_확인": {
+      "main": [
+        [
+          {
+            "node": "성공",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e4d21b65-c01a-4e38-add8-a9f6f5f522df",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2eeaa1553e793bf1a04159196cbd7b5bbd9ef1b74df22f7f983d24d48e4884c6"
+  },
+  "id": "zXOcFbEKAMn6LVGt",
+  "tags": []
+}
