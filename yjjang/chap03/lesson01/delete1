@@ -1,0 +1,63 @@
+
+오케이. Kudu면 답이 훨씬 명확해져요. Kudu는 row-level upsert/update/delete를 지원하고(원자적 row write), 문제의 핵심은 보통 **Spark 쪽에서 “같은 키에 대한 여러 CDC 이벤트가 한 마이크로배치 안에서 섞일 때, 적용 순서가 비결정적”**이라는 점입니다.
+즉, Kudu는 업데이트 저장소로는 괜찮고, Spark에서 키 단위로 “최종 1건만” 만들거나, 순서를 강제한 뒤 Kudu에 쓰면 정합성이 맞아집니다.
+아래는 실무에서 Kudu + Spark CDC에 쓰는 우선순위 솔루션입니다.
+1) 가장 확실한 해결: “마이크로배치 내 키별 최종 상태 1건만 만들어서” Kudu Upsert
+한 배치에서 같은 key에 delete + insert(또는 update 여러 번)가 같이 오면,
+그 배치에서 키별로 정렬(결정적 tie-breaker 포함)
+가장 마지막 이벤트 1건만 남김
+마지막 이벤트가 delete면 Kudu delete
+아니면 Kudu upsert
+이렇게 하면 Spark의 병렬성 때문에 순서가 섞여도, 쓰기 전에 이미 결과가 1건으로 정규화되므로 Kudu 정합성이 맞습니다.
+결정적 정렬 키(중요)
+event_ts만 쓰면 같은 시각 동률이 생겨요. 그래서 아래를 같이 써야 합니다.
+1순위: DB commit timestamp (Debezium이면 source.ts_ms 또는 equivalent)
+2순위: Kafka partition
+3순위: Kafka offset
+=> (event_ts, kafka_partition, kafka_offset)로 “완전한 순서”를 만들면 됩니다.
+Structured Streaming에서 Kafka를 읽으면 partition, offset, timestamp 컬럼을 받을 수 있어요.
+2) 구현 패턴: foreachBatch에서 “dedup → split → Kudu write”
+Structured Streaming이라면 writeStream.foreachBatch로 가는 게 정석입니다.
+처리 흐름
+microbatch DF: key, op(c/u/d), payload, event_ts, partition, offset
+window 없이 배치 내부에서 키별 최신 1건 선택
+delete DF / upsert DF로 분리
+Kudu에
+upsert: kuduContext.upsertRows
+delete: kuduContext.deleteRows (키 컬럼만 필요)
+포인트: 절대 “그냥 microbatch DF를 바로 Kudu에 upsert” 하면 안 됨.
+같은 키가 여러 행으로 들어오면 Spark 실행 순서가 비결정적이라 꼬입니다.
+3) 추가로 반드시 체크해야 하는 것들
+A. Kafka 파티셔닝
+같은 key가 항상 같은 Kafka partition으로 가는지가 중요합니다.
+Debezium 기본도 key 기반 파티셔닝을 많이 쓰지만, 커넥터/토픽 설정에 따라 다릅니다.
+같은 키가 파티션을 넘나들면, “오프셋 순서” 자체가 전역으로 정의되지 않아서 더 어려워집니다.
+B. Spark checkpoint + exactly-once
+Kudu sink는 “완전한 E2E exactly-once”가 쉽지 않아서,
+Structured Streaming checkpoint를 반드시 켜고
+foreachBatch 안에서 idempotent하게 동작하도록(키별 최종 1건 upsert) 설계해야 합니다. 이러면 재처리(replay)가 있어도 결과가 안정적입니다.
+C. delete 이벤트 처리 방식
+delete가 tombstone(키만)인지, before-image가 있는지에 따라 파싱 방식이 달라요. Kudu delete는 키만 있으면 됩니다.
+4) 실전용 “가이드 코드 골격” (개념)
+(코드 그대로 붙여넣기보단, 네 코드 구조에 맞춰 끼워 넣는 게 좋아서 골격만 설명할게)
+df = kafkaStream.select(key, op, payload..., event_ts, partition, offset)
+df2 = df.withColumn("order_key", struct(col("event_ts"), col("partition"), col("offset")))
+latest = df2.withColumn("rn", row_number().over(Window.partitionBy(key).orderBy(col("order_key").desc())))
+final = latest.filter(col("rn") === 1).drop("rn")
+deletes = final.filter(col("op") === "d").select(keyCols...)
+upserts = final.filter(col("op").isin("c","u","r")).select(allColsForTable...)
+foreachBatch에서 kuduContext.deleteRows(deletes, table) + kuduContext.upsertRows(upserts, table)
+5) “동시간대 delete+insert”가 의미하는 것(주의)
+DB CDC에서 같은 ts에 delete+insert는 보통:
+트랜잭션 경계에서 재삽입(soft migration)
+PK 변경을 delete+insert로 표현
+또는 Debezium이 update를 delete+insert로 내보내는 구성(rare)
+일 수 있어요.
+이 경우에도 “최종 1건 선택”이 맞는데, 정렬 기준을 DB 트랜잭션 순서로 잡을 수 있느냐가 관건입니다.
+가능하면 이벤트에 LSN/SCN(Oracle면 SCN), binlog pos, Debezium source.position 같은 단조 증가 값이 있으면 그걸 1순위로 쓰는 게 가장 안전합니다.
+6) 바로 다음 단계: 너의 “마지막 Kudu 업데이트 코드”를 기준으로 패치 포인트 잡기
+네가 말한 “스파크 마지막 코드에 dataframe을 쿠두에 업데이트” 부분이 어떤 방식인지에 따라 처방이 달라져요:
+kuduContext.upsertRows(df, table) 형태인가?
+아니면 Spark SQL로 insertInto 같은 간접 방식인가?
+delete도 같이 치고 있나, 아니면 upsert만 있나?
+**그 마지막 write 부분 코드(10~30줄 정도) + Kafka에서 읽어온 스키마(op, ts, key 컬럼명)**만 붙여주면, 내가 네 코드 흐름 그대로 유지하면서 (1) 키별 최종 1건 dedup 추가 (2) delete/upsert 분리 (3) 안정적인 order key 구성까지 딱 맞게 수정안을 만들어줄게.
