@@ -1,0 +1,41 @@
+부분적으로는 도움 되지만, repartition()만으로 정합성 문제를 “보장”하긴 어렵습니다.
+왜냐면 지금 깨지는 포인트가 “같은 키에 대한 여러 CDC 이벤트가 한 배치에 존재”하는 상황에서 Kudu에 적용되는 최종 순서/의미가 결정되지 않는 것인데, repartition은 데이터 배치/태스크 분산 방식만 바꿀 뿐, 키별 ‘마지막 이벤트 1건’으로 정규화하거나 이벤트 순서를 강제해주진 않거든요.
+다만, 조건이 맞으면 repartition이 사이드 이펙트를 줄이는 보조책은 될 수 있어요.
+repartition이 해줄 수 있는 것
+repartition(col("key"))를 하면 같은 key가 같은 파티션(태스크)로 모이게 할 수 있음
+그 파티션 안에서 sortWithinPartitions(orderCols...)를 하면 파티션 내부 정렬은 가능
+즉, “같은 키가 여러 태스크로 흩어져서 Kudu에 동시에 upsert/delete 치는 상황”은 줄어듭니다.
+하지만 “이것만으로는 안 되는 이유”
+1) Kudu write는 여전히 “여러 row”를 그대로 보냄
+동일 키에 대해 delete/insert가 같이 있으면, repartition 후에도 그 두 row가 남아있는 상태로 Kudu에 들어갑니다.
+그러면 결과는:
+어떤 row가 먼저 적용되느냐(네트워크/태스크 처리/배치 write 내부 순서)에 따라 달라질 수 있음
+특히 delete+insert 같이 상반된 연산이면 더 위험
+2) sortWithinPartitions는 “정렬”이지 “최종 1건 선택”이 아님
+정렬해도, Kudu에 둘 다 보내면 Kudu가 “의미적으로 마지막 것만 반영”해주지 않습니다.
+(Upsert는 upsert고 delete는 delete입니다.)
+3) Spark의 물리 실행계획에서 셔플/코얼레스 등으로 순서가 깨질 수 있음
+repartition → sortWithinPartitions 했더라도,
+그 다음 변환에서 다시 셔플이 일어나면 무의미해질 수 있고
+foreachPartition으로 직접 처리하지 않는 한 “write 순서”를 끝까지 고정하기도 어렵습니다.
+결론: repartition은 보조, 정답은 키별 최종 1건으로 줄인 뒤 쓰기
+정합성을 “보장”하려면 마이크로배치마다:
+(event_ts, kafka_partition, kafka_offset) 같은 결정적 order key 만들고
+key별로 가장 마지막 이벤트 1건만 남기고
+delete/upsert 분리해서 Kudu에 반영
+이게 Kudu CDC의 표준 패턴입니다.
+그래도 repartition을 쓴다면 “최소한 이 조합”이 실전에서 의미 있음
+df.repartition(col("pk"))
+df.sortWithinPartitions(col("event_ts"), col("kafka_partition"), col("kafka_offset"))
+그리고 foreachPartition에서 “동일 pk 연속 이벤트를 스캔해서 마지막만 적용” 같은 로직을 직접 구현
+근데 이 방식은:
+코드 복잡도가 확 올라가고
+장애/재처리(idempotency)/성능 튜닝이 어려워져서 대부분은 그냥 DataFrame 단계에서 row_number로 1건만 만들고 KuduContext로 씁니다.
+너 상황에서 가장 빠른 처방
+repartition()로 “혹시 되지 않을까?” 수준이 아니라, 아래 한 줄이 핵심입니다:
+Kudu에 쓰기 직전에 key별 최종 이벤트 1건만 남겨라.
+원하면 네 데이터 컬럼 기준으로 “order key 설계 + dedup + delete/upsert 분리”를 지금 쓰고 있는 코드 스타일(kuduContext인지, spark-kudu connector인지)에 맞춰 바로 예제로 써줄게.
+가능하면 딱 3가지만 알려줘:
+PK 컬럼명(예: id, user_id 등)
+이벤트 순서를 나타내는 컬럼(예: source.ts_ms / op_ts / 없음)
+Kudu write 코드가 kuduContext.upsertRows인지, 다른 방식인지
