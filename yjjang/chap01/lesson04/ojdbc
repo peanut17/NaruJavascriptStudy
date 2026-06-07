@@ -1,0 +1,415 @@
+
+아래처럼 A↔B 양방향 ETL 구조로 잡으면 됩니다.
+<dependencies>
+    <!-- Spring Batch -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-batch</artifactId>
+    </dependency>
+
+    <!-- JDBC -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+
+    <!-- Oracle JDBC -->
+    <dependency>
+        <groupId>com.oracle.database.jdbc</groupId>
+        <artifactId>ojdbc11</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+
+    <!-- Lombok 선택 -->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+</dependencies>
+Plain text
+A 서버 A_TABLE → B 서버 B_TABLE
+B 서버 B_TABLE → A 서버 A_TABLE
+1. Maven pom.xml
+XML
+@Configuration
+@RequiredArgsConstructor
+public class AToBBatchConfig {
+
+    private final JobRepository jobRepository;
+
+    @Qualifier("oracleADataSource")
+    private final DataSource oracleADataSource;
+
+    @Qualifier("oracleBDataSource")
+    private final DataSource oracleBDataSource;
+
+    @Qualifier("oracleBTransactionManager")
+    private final PlatformTransactionManager oracleBTransactionManager;
+
+    @Bean
+    public JdbcCursorItemReader<EtlDataDto> aToBReader() {
+        return new JdbcCursorItemReaderBuilder<EtlDataDto>()
+                .name("aToBReader")
+                .dataSource(oracleADataSource)
+                .sql("""
+                    SELECT ID, NAME, CREATED_AT, UPDATED_AT
+                    FROM A_TABLE
+                    WHERE UPDATED_AT >= SYSDATE - (5 / 1440)
+                    """)
+                .rowMapper((rs, rowNum) -> {
+                    EtlDataDto dto = new EtlDataDto();
+                    dto.setId(rs.getLong("ID"));
+                    dto.setName(rs.getString("NAME"));
+                    dto.setCreatedAt(rs.getTimestamp("CREATED_AT").toLocalDateTime());
+                    dto.setUpdatedAt(rs.getTimestamp("UPDATED_AT").toLocalDateTime());
+                    return dto;
+                })
+                .build();
+    }
+
+    @Bean
+    public JdbcBatchItemWriter<EtlDataDto> aToBWriter() {
+        return new JdbcBatchItemWriterBuilder<EtlDataDto>()
+                .dataSource(oracleBDataSource)
+                .sql("""
+                    MERGE INTO B_TABLE T
+                    USING (
+                        SELECT :id ID,
+                               :name NAME,
+                               :createdAt CREATED_AT,
+                               :updatedAt UPDATED_AT
+                        FROM DUAL
+                    ) S
+                    ON (T.ID = S.ID)
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            T.NAME = S.NAME,
+                            T.UPDATED_AT = S.UPDATED_AT
+                    WHEN NOT MATCHED THEN
+                        INSERT (
+                            ID, NAME, CREATED_AT, UPDATED_AT
+                        )
+                        VALUES (
+                            S.ID, S.NAME, S.CREATED_AT, S.UPDATED_AT
+                        )
+                    """)
+                .beanMapped()
+                .build();
+    }
+
+    @Bean
+    public Step aToBStep() {
+        return new StepBuilder("aToBStep", jobRepository)
+                .<EtlDataDto, EtlDataDto>chunk(1000, oracleBTransactionManager)
+                .reader(aToBReader())
+                .writer(aToBWriter())
+                .build();
+    }
+
+    @Bean
+    public Job aToBJob() {
+        return new JobBuilder("aToBJob", jobRepository)
+                .start(aToBStep())
+                .build();
+    }
+}
+2. application.yml
+spring:
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: always
+
+app:
+  datasource:
+    oracle-a:
+      jdbc-url: jdbc:oracle:thin:@//10.10.10.1:1521/ORCL
+      username: A_USER
+      password: A_PASS
+      driver-class-name: oracle.jdbc.OracleDriver
+      maximum-pool-size: 10
+
+    oracle-b:
+      jdbc-url: jdbc:oracle:thin:@//10.10.10.2:1521/ORCL
+      username: B_USER
+      password: B_PASS
+      driver-class-name: oracle.jdbc.OracleDriver
+      maximum-pool-size: 10
+YAML
+@Configuration
+public class DataSourceConfig {
+
+    @Bean
+    @Primary
+    @ConfigurationProperties("app.datasource.oracle-a")
+    public DataSource oracleADataSource() {
+        return DataSourceBuilder.create()
+                .type(HikariDataSource.class)
+                .build();
+    }
+
+    @Bean
+    @ConfigurationProperties("app.datasource.oracle-b")
+    public DataSource oracleBDataSource() {
+        return DataSourceBuilder.create()
+                .type(HikariDataSource.class)
+                .build();
+    }
+
+    @Bean
+    public PlatformTransactionManager oracleATransactionManager(
+            @Qualifier("oracleADataSource") DataSource dataSource
+    ) {
+        return new DataSourceTransactionManager(dataSource);
+    }
+
+    @Bean
+    public PlatformTransactionManager oracleBTransactionManager(
+            @Qualifier("oracleBDataSource") DataSource dataSource
+    ) {
+        return new DataSourceTransactionManager(dataSource);
+    }
+}
+3. DataSource 설정
+@Configuration
+@RequiredArgsConstructor
+public class BToABatchConfig {
+
+    private final JobRepository jobRepository;
+
+    @Qualifier("oracleBDataSource")
+    private final DataSource oracleBDataSource;
+
+    @Qualifier("oracleADataSource")
+    private final DataSource oracleADataSource;
+
+    @Qualifier("oracleATransactionManager")
+    private final PlatformTransactionManager oracleATransactionManager;
+
+    @Bean
+    public JdbcCursorItemReader<EtlDataDto> bToAReader() {
+        return new JdbcCursorItemReaderBuilder<EtlDataDto>()
+                .name("bToAReader")
+                .dataSource(oracleBDataSource)
+                .sql("""
+                    SELECT ID, NAME, CREATED_AT, UPDATED_AT
+                    FROM B_TABLE
+                    WHERE UPDATED_AT >= SYSDATE - (5 / 1440)
+                    """)
+                .rowMapper((rs, rowNum) -> {
+                    EtlDataDto dto = new EtlDataDto();
+                    dto.setId(rs.getLong("ID"));
+                    dto.setName(rs.getString("NAME"));
+                    dto.setCreatedAt(rs.getTimestamp("CREATED_AT").toLocalDateTime());
+                    dto.setUpdatedAt(rs.getTimestamp("UPDATED_AT").toLocalDateTime());
+                    return dto;
+                })
+                .build();
+    }
+
+    @Bean
+    public JdbcBatchItemWriter<EtlDataDto> bToAWriter() {
+        return new JdbcBatchItemWriterBuilder<EtlDataDto>()
+                .dataSource(oracleADataSource)
+                .sql("""
+                    MERGE INTO A_TABLE T
+                    USING (
+                        SELECT :id ID,
+                               :name NAME,
+                               :createdAt CREATED_AT,
+                               :updatedAt UPDATED_AT
+                        FROM DUAL
+                    ) S
+                    ON (T.ID = S.ID)
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            T.NAME = S.NAME,
+                            T.UPDATED_AT = S.UPDATED_AT
+                    WHEN NOT MATCHED THEN
+                        INSERT (
+                            ID, NAME, CREATED_AT, UPDATED_AT
+                        )
+                        VALUES (
+                            S.ID, S.NAME, S.CREATED_AT, S.UPDATED_AT
+                        )
+                    """)
+                .beanMapped()
+                .build();
+    }
+
+    @Bean
+    public Step bToAStep() {
+        return new StepBuilder("bToAStep", jobRepository)
+                .<EtlDataDto, EtlDataDto>chunk(1000, oracleATransactionManager)
+                .reader(bToAReader())
+                .writer(bToAWriter())
+                .build();
+    }
+
+    @Bean
+    public Job bToAJob() {
+        return new JobBuilder("bToAJob", jobRepository)
+                .start(bToAStep())
+                .build();
+    }
+}
+Java
+4. DTO
+Java
+@Getter
+@Setter
+public class EtlDataDto {
+
+    private Long id;
+    private String name;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+}
+5. A 서버 → B 서버 ETL
+Java
+6. B 서버 → A 서버 ETL
+Java
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class EtlScheduler {
+
+    private final JobLauncher jobLauncher;
+
+    @Qualifier("aToBJob")
+    private final Job aToBJob;
+
+    @Qualifier("bToAJob")
+    private final Job bToAJob;
+
+    @Scheduled(cron = "0 */5 * * * *")
+    public void runEtl() {
+        runJob(aToBJob, "A_TO_B");
+        runJob(bToAJob, "B_TO_A");
+    }
+
+    private void runJob(Job job, String jobName) {
+        try {
+            JobParameters params = new JobParametersBuilder()
+                    .addString("jobName", jobName)
+                    .addLong("timestamp", System.currentTimeMillis())
+                    .toJobParameters();
+
+            jobLauncher.run(job, params);
+
+        } catch (Exception e) {
+            log.error("{} ETL failed", jobName, e);
+        }
+    }
+}
+7. 5분마다 양방향 실행
+Java
+8. Main 클래스
+Java
+@EnableScheduling
+@SpringBootApplication
+public class EtlBatchApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(EtlBatchApplication.class, args);
+    }
+}
+핵심 주의사항
+양방향 ETL에서는 반드시 INSERT만 쓰면 안 됩니다.
+반드시 아래 중 하나를 써야 합니다.
+Plain text
+1. MERGE INTO
+2. UPSERT 기준 컬럼
+3. UPDATED_AT 기준 증분 조회
+4. ETL_LOG 테이블로 마지막 처리 시간 관리
+현재 예제는 간단히 다음 조건을 사용했습니다.
+SQL
+WHERE UPDATED_AT >= SYSDATE - (5 / 1440)
+하지만 실무에서는 더 안전하게 ETL_SYNC_LOG 테이블을 두는 게 좋습니다.
+SQL
+ETL_SYNC_LOG
+- JOB_NAME
+- LAST_SUCCESS_TIME
+- START_TIME
+- END_TIME
+- STATUS
+추천 구조는 이렇습니다.
+Plain text
+A_TO_B_JOB
+- A_TABLE 조회
+- B_TABLE MERGE
+- 성공 시 ETL_SYNC_LOG 갱신
+
+B_TO_A_JOB
+- B_TABLE 조회
+- A_TABLE MERGE
+- 성공 시 ETL_SYNC_LOG 갱신
+정리하면, A→B와 B→A를 각각 Job으로 분리하고, 각 Job의 Writer 쪽 DB TransactionManager를 사용하면 됩
+니다.
+
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class EtlScheduler {
+
+    private final JobLauncher jobLauncher;
+
+    @Qualifier("aToBJob")
+    private final Job aToBJob;
+
+    @Qualifier("bToAJob")
+    private final Job bToAJob;
+
+    /**
+     * 5분마다 실행
+     * 예: 00:00, 00:05, 00:10 ...
+     */
+    @Scheduled(cron = "0 */5 * * * *")
+    public void runEtlBatch() {
+        runJob(aToBJob, "A_TO_B");
+        runJob(bToAJob, "B_TO_A");
+    }
+
+    private void runJob(Job job, String jobName) {
+        try {
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addString("jobName", jobName)
+                    .addLong("runTime", System.currentTimeMillis())
+                    .toJobParameters();
+
+            jobLauncher.run(job, jobParameters);
+
+            log.info("{} batch success", jobName);
+
+        } catch (JobExecutionAlreadyRunningException e) {
+            log.warn("{} batch already running", jobName);
+
+        } catch (JobRestartException e) {
+            log.error("{} batch restart error", jobName, e);
+
+        } catch (JobInstanceAlreadyCompleteException e) {
+            log.warn("{} batch already completed", jobName);
+
+        } catch (JobParametersInvalidException e) {
+            log.error("{} batch invalid parameters", jobName, e);
+
+        } catch (Exception e) {
+            log.error("{} batch failed", jobName, e);
+        }
+    }
+}
+Java
+Main 클래스에 스케줄링 활성화도 필요합니다.
+Java
+@EnableScheduling
+@SpringBootApplication
+public class EtlBatchApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(EtlBatchApplication.class, args);
+    }
+}
+@Scheduled(cron = "0 */5 * * * *") 의미는 매 5분마다 0초에 실행입니다.
