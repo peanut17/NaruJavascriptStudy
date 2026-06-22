@@ -1,0 +1,272 @@
+
+전체 구조
+Plain text
+Oracle / Hadoop / Hive
+        ↓
+RAW 적재
+        ↓
+정형 데이터 품질 처리
+결측 / 중복 / 노이즈 / 타입 정리
+        ↓
+LLM용 의미 변환
+행 → 문장 / JSON / 문서
+        ↓
+Chunk 분할
+        ↓
+Embedding 생성
+        ↓
+Vector DB 저장
+        ↓
+RAG / Fine-tuning / 분석용 LLM 활용
+1. 먼저 정형 데이터를 정제한다
+LLM에 넣기 전 최소한 아래 처리는 해야 합니다.
+Plain text
+NULL 처리
+중복 제거
+코드값 표준화
+날짜 포맷 통일
+숫자 단위 통일
+이상치 제거
+컬럼명 표준화
+개인정보 마스킹
+예시:
+Plain text
+CUST_NM → 고객명
+REG_DT → 가입일자
+USE_YN → 사용여부
+AMT → 금액
+2. 행 데이터를 LLM이 이해할 수 있는 텍스트로 변환
+LLM은 테이블 자체보다 문장화된 데이터를 더 잘 이해합니다.
+원본 테이블 예시
+CUSTOMER_ID
+AGE
+GENDER
+JOIN_DT
+GRADE
+C001
+35
+M
+2024-01-01
+VIP
+LLM용 변환 예시
+Plain text
+고객 C001은 35세 남성이며, 2024년 1월 1일에 가입했다. 현재 등급은 VIP이다.
+또는 JSON 형태로 관리할 수도 있습니다.
+JSON
+{
+  "type": "customer_profile",
+  "customer_id": "C001",
+  "text": "고객 C001은 35세 남성이며, 2024년 1월 1일에 가입했다. 현재 등급은 VIP이다.",
+  "metadata": {
+    "source": "ORACLE.CUSTOMER",
+    "pk": "C001",
+    "join_dt": "2024-01-01",
+    "grade": "VIP"
+  }
+}
+3. 테이블별 템플릿을 만든다
+200개 테이블이면 테이블마다 수작업으로 문장 변환하면 안 됩니다.
+메타데이터 기반 템플릿을 둡니다.
+SQL
+CREATE TABLE AI_TEXT_TEMPLATE (
+    TABLE_NAME      VARCHAR2(100),
+    TEMPLATE_TEXT   VARCHAR2(4000),
+    USE_YN          CHAR(1)
+);
+예시:
+Plain text
+CUSTOMER
+고객 {CUSTOMER_ID}은 {AGE}세 {GENDER}이며, {JOIN_DT}에 가입했고 등급은 {GRADE}입니다.
+
+ORDER
+주문 {ORDER_ID}는 고객 {CUSTOMER_ID}가 {ORDER_DT}에 {AMOUNT}원 결제한 주문입니다.
+
+LOG
+{OCCR_DT}에 출발지 IP {SIP}에서 목적지 IP {DIP}로 이벤트 {STRTITLE}이 발생했습니다.
+4. 컬럼 설명 사전도 필요하다
+LLM은 PKT_SEQ, OCCR_DT, STRTITLE 같은 컬럼명을 그대로 보면 의미를 잘 모릅니다.
+그래서 컬럼 사전을 만듭니다.
+SQL
+CREATE TABLE AI_COLUMN_DICTIONARY (
+    TABLE_NAME      VARCHAR2(100),
+    COLUMN_NAME     VARCHAR2(100),
+    COLUMN_KR_NAME  VARCHAR2(200),
+    DESCRIPTION     VARCHAR2(1000),
+    DATA_TYPE       VARCHAR2(50),
+    EXAMPLE_VALUE   VARCHAR2(500),
+    IS_SENSITIVE    CHAR(1)
+);
+예시:
+Plain text
+TABLE_NAME   COLUMN_NAME   COLUMN_KR_NAME   DESCRIPTION
+CUSTOMER     CUST_ID       고객ID           고객을 식별하는 고유번호
+CUSTOMER     JOIN_DT       가입일자         고객이 서비스에 가입한 날짜
+LOG          SIP           출발지IP         트래픽이 시작된 IP 주소
+LOG          DIP           목적지IP         트래픽이 도착한 IP 주소
+5. 개인정보와 민감정보는 반드시 제거 또는 마스킹
+LLM 학습용 데이터에 바로 넣으면 안 되는 값:
+Plain text
+이름
+주민번호
+전화번호
+이메일
+주소
+계좌번호
+카드번호
+IP
+의료정보
+인증토큰
+비밀번호
+예시:
+Plain text
+홍길동 → 고객_001
+010-1234-5678 → PHONE_MASKED
+test@test.com → EMAIL_MASKED
+192.168.0.10 → IP_MASKED
+Oracle 예시:
+SQL
+SELECT
+    CUSTOMER_ID,
+    REGEXP_REPLACE(PHONE, '([0-9]{3})-?[0-9]{3,4}-?([0-9]{4})', '\1****\2') AS PHONE_MASKED,
+    REGEXP_REPLACE(EMAIL, '(^.).*(@.*$)', '\1***\2') AS EMAIL_MASKED
+FROM CUSTOMER;
+6. LLM 학습 목적에 따라 형태가 달라진다
+1) RAG용 데이터
+질문답변 검색용이면 아래 형태가 좋습니다.
+JSON
+{
+  "id": "CUSTOMER_C001",
+  "text": "고객 C001은 35세 남성이며, 2024년 1월 1일에 가입했고 등급은 VIP입니다.",
+  "metadata": {
+    "table": "CUSTOMER",
+    "pk": "C001",
+    "data_date": "2024-01-01"
+  }
+}
+2) Fine-tuning용 데이터
+모델을 추가 학습시키려면 질문-답변 형태가 필요합니다.
+JSON
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "고객 C001의 등급은 무엇인가요?"
+    },
+    {
+      "role": "assistant",
+      "content": "고객 C001의 등급은 VIP입니다."
+    }
+  ]
+}
+3) Text-to-SQL용 데이터
+자연어로 SQL을 만들게 하려면 이런 형태가 필요합니다.
+JSON
+{
+  "question": "2024년에 가입한 VIP 고객 수를 알려줘",
+  "sql": "SELECT COUNT(*) FROM CUSTOMER WHERE GRADE = 'VIP' AND JOIN_DT >= DATE '2024-01-01' AND JOIN_DT < DATE '2025-01-01';",
+  "tables": ["CUSTOMER"],
+  "columns": ["GRADE", "JOIN_DT"]
+}
+from pyspark.sql import functions as F
+
+df = spark.table("clean.customer")
+
+ai_df = df.select(
+    F.concat_ws(
+        "",
+        F.lit("고객 "),
+        F.col("customer_id"),
+        F.lit("은 "),
+        F.col("age").cast("string"),
+        F.lit("세 "),
+        F.when(F.col("gender") == "M", "남성")
+         .when(F.col("gender") == "F", "여성")
+         .otherwise("성별 미상"),
+        F.lit("이며, "),
+        F.col("join_dt").cast("string"),
+        F.lit("에 가입했고 등급은 "),
+        F.col("grade"),
+        F.lit("입니다.")
+    ).alias("text"),
+    F.col("customer_id").alias("pk"),
+    F.lit("CUSTOMER").alias("source_table")
+)
+
+ai_df.write.mode("overwrite").saveAsTable("ai_ready.customer_text")
+7. Hadoop/Spark에서 대량 변환 예시
+Python
+8. AI Ready Data 테이블 예시
+SQL
+CREATE TABLE AI_READY_DATA (
+    DATA_ID        VARCHAR2(200),
+    SOURCE_SYSTEM  VARCHAR2(50),
+    SOURCE_TABLE   VARCHAR2(100),
+    SOURCE_PK      VARCHAR2(300),
+    DATA_TYPE      VARCHAR2(50),
+    TEXT_CONTENT   CLOB,
+    METADATA_JSON  CLOB,
+    QUALITY_SCORE  NUMBER,
+    CREATED_AT     DATE
+);
+예시 데이터:
+Plain text
+DATA_ID       CUSTOMER_C001
+SOURCE_SYSTEM ORACLE
+SOURCE_TABLE  CUSTOMER
+SOURCE_PK     C001
+DATA_TYPE     customer_profile
+TEXT_CONTENT  고객 C001은 35세 남성이며, 2024년 1월 1일에 가입했고 등급은 VIP입니다.
+QUALITY_SCORE 0.95
+9. 품질 점수도 같이 저장
+LLM에 넣을 데이터는 품질 점수를 계산해두는 게 좋습니다.
+Plain text
+결측 없음       +0.3
+중복 아님       +0.2
+필수값 정상     +0.2
+형식 정상       +0.2
+민감정보 제거됨 +0.1
+예:
+Plain text
+정상 데이터: 0.95
+결측 일부 있음: 0.75
+중복 의심: 0.60
+민감정보 포함 위험: 제외
+10. 최종 파이프라인 추천
+당신의 환경이면 이렇게 잡는 게 좋습니다.
+Plain text
+Oracle
+  ↓
+Spark / PySpark
+  ↓
+Hadoop Hive CLEAN
+  ↓
+AI_COLUMN_DICTIONARY
+AI_TEXT_TEMPLATE
+AI_QUALITY_RULE
+  ↓
+AI_READY_DATA 생성
+  ↓
+Embedding
+  ↓
+Vector DB
+  ↓
+LLM RAG / Text-to-SQL / 보안분석 AI
+핵심 정리
+정형 데이터를 LLM이 활용하게 하려면 단순 CSV가 아니라 아래 형태로 바꿔야 합니다.
+Plain text
+정제된 행 데이터
++ 컬럼 의미 사전
++ 문장화 템플릿
++ 메타데이터
++ 개인정보 마스킹
++ 품질 점수
+즉, 목표 테이블은 이런 구조가 가장 좋습니다.
+Plain text
+AI_READY_DATA
+- DATA_ID
+- SOURCE_TABLE
+- SOURCE_PK
+- TEXT_CONTENT
+- METADATA_JSON
+- QUALITY_SCORE
+이 구조로 만들면 Oracle, Hadoop, Hive 데이터 모두 LLM 검색·RAG·Text-to-SQL·AI 분석에 활용할 수 있습니다.
