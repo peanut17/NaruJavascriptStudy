@@ -1,0 +1,180 @@
+
+아래처럼 주석을 달아서 보면 됩니다. after.number가 null이거나 빈 문자열이면 null로 유지하고, 값이 있을 때만 Base64로 변환하는 코드입니다.
+from pyspark.sql import functions as F
+
+df = df.withColumn(
+    "after",  # 기존 after struct 컬럼을 수정
+    F.col("after").withField(
+        "number",  # after 내부의 number 필드만 변경
+
+        F.when(
+            # number 값이 null이거나
+            F.col("after.number").isNull() |
+
+            # 공백 제거 후 빈 문자열이면
+            # 예: "", "   "
+            (F.trim(F.col("after.number")) == ""),
+
+            # null 값으로 저장
+            F.lit(None)
+        ).otherwise(
+            # number 값이 존재하는 경우
+
+            # 문자열을 UTF-8 기준 binary 타입으로 변환
+            F.base64(
+                F.encode(
+                    F.col("after.number"),
+                    "UTF-8"
+                )
+            )
+
+            # 변환 과정:
+            # "010-1111-1111"
+            #      ↓ encode()
+            # binary 데이터
+            #      ↓ base64()
+            # "MDEwLTExMTEtMTExMQ=="
+        )
+    )
+)
+처리 결과는 이런 식입니다.
+after.number 변경 전       after.number 변경 후
+----------------------------------------------------------
+010-1111-1111              MDEwLTExMTEtMTExMQ==
+010-2222-3333              MDEwLTIyMjItMzMzMw==
+null                       null
+""                         null
+"   "                      null
+만약 빈 문자열은 그대로 두고 null만 처리하면 된다면 더 간단하게 쓸 수 있습니다.
+from pyspark.sql import functions as F
+
+df = df.withColumn(
+    "after",  # after struct 컬럼 수정
+    F.col("after").withField(
+        "number",  # number 필드만 교체
+
+        F.when(
+            # number가 null이면
+            F.col("after.number").isNull(),
+
+            # 그대로 null 유지
+            F.lit(None)
+        ).otherwise(
+            # null이 아니면 UTF-8 binary로 변환 후 Base64 인코딩
+            F.base64(
+                F.encode(
+                    F.col("after.number"),
+                    "UTF-8"
+                )
+            )
+        )
+    )
+)
+실제로는 Spark 함수가 null을 자동 전파하기 때문에, null만 고려한다면 아래 코드로도 동일하게 동작합니다.
+from pyspark.sql import functions as F
+
+df = df.withColumn(
+    "after",  # after 구조는 그대로 유지
+    F.col("after").withField(
+        "number",  # number 값만 변경
+
+        # number 문자열을 UTF-8 binary로 변환 후 Base64 인코딩
+        # 입력값이 null이면 결과도 자동으로 null
+        F.base64(
+            F.encode(
+                F.col("after.number"),
+                "UTF-8"
+            )
+        )
+    )
+)
+현재 CDC 파이프라인이라면 마지막 코드가 가장 간결하고, 빈 문자열까지 null 처리해야 한다면 첫 번째 코드를 쓰는 것을 권장합니다.
+
+
+
+after.name, after.number 둘 다 null 또는 빈 문자열이면 null로 유지하고, 값이 있으면 Base64로 변환하는 방식입니다.
+from pyspark.sql import functions as F
+
+df = df.withColumn(
+    "after",
+    F.col("after")
+        .withField(
+            "name",
+            F.when(
+                # name이 null이거나 빈 문자열이면 null 처리
+                F.col("after.name").isNull() |
+                (F.trim(F.col("after.name")) == ""),
+                F.lit(None)
+            ).otherwise(
+                # 값이 있으면 UTF-8 → Base64 변환
+                F.base64(
+                    F.encode(
+                        F.col("after.name"),
+                        "UTF-8"
+                    )
+                )
+            )
+        )
+        .withField(
+            "number",
+            F.when(
+                # number가 null이거나 빈 문자열이면 null 처리
+                F.col("after.number").isNull() |
+                (F.trim(F.col("after.number")) == ""),
+                F.lit(None)
+            ).otherwise(
+                # 값이 있으면 UTF-8 → Base64 변환
+                F.base64(
+                    F.encode(
+                        F.col("after.number"),
+                        "UTF-8"
+                    )
+                )
+            )
+        )
+)
+예를 들어 입력이:
+{
+  "after": {
+    "name": "홍길동",
+    "number": "010-1111-1111"
+  }
+}
+이면 after 내부에서 두 값만 Base64로 바뀌고, 나머지 필드는 그대로 유지됩니다.
+name   →  7ZmN6ri464+Z
+number →  MDEwLTExMTEtMTExMQ==
+null이나 빈 값은 이렇게 처리됩니다.
+null   → null
+""     → null
+"   "  → null
+참고로 null만 처리하면 되고 빈 문자열까지 신경 쓸 필요가 없다면 when() 없이 더 간단하게 작성할 수도 있습니다.
+
+
+null만 처리하면 Spark 함수가 자동으로 null을 전파하므로 when() 없이 이렇게 쓰면 됩니다.
+from pyspark.sql import functions as F
+
+df = df.withColumn(
+    "after",
+    F.col("after")
+        .withField(
+            "name",
+            # null이면 결과도 null, 값이 있으면 Base64 변환
+            F.base64(
+                F.encode(F.col("after.name"), "UTF-8")
+            )
+        )
+        .withField(
+            "number",
+            # null이면 결과도 null, 값이 있으면 Base64 변환
+            F.base64(
+                F.encode(F.col("after.number"), "UTF-8")
+            )
+        )
+)
+동작은 다음과 같습니다.
+name = "홍길동"           → Base64 문자열
+name = null              → null
+
+number = "010-1111-1111" → Base64 문자열
+number = null            → null
+즉, 현재 요구사항이라면 이 코드가 가장 간결합니다.
