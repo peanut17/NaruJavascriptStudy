@@ -1,0 +1,203 @@
+
+그렇다면 이전처럼 StructType을 고정 선언하는 방식은 적합하지 않습니다.
+CDC 특성상:
+INSERT
+after = {
+    "id": 1,
+    "name": "홍길동",
+    "number": "010-1111-1111",
+    "address": "서울",
+    ...
+}
+
+UPDATE name만 변경
+after = {
+    "name": "김철수"
+}
+
+UPDATE number만 변경
+after = {
+    "number": "010-9999-9999"
+}
+이 구조에서는 after에 실제 존재하는 name, number만 Base64 처리해야 합니다. 없는 컬럼을 null로 추가하면 안 됩니다.
+가장 적합한 방법: MapType + transform_values
+after 안의 값들을 문자열로 처리해도 괜찮다면 이 방식이 가장 간단하고 Spark 내부 함수만 사용해서 성능도 좋습니다.
+from pyspark.sql import functions as F
+from pyspark.sql.types import MapType, StringType
+
+
+# 1. JSON String 형태의 after를 Map으로 변환
+df = df.withColumn(
+    "after_map",
+    F.from_json(
+        F.col("after"),
+        MapType(StringType(), StringType())
+    )
+)
+
+
+# 2. after에 실제 존재하는 컬럼들을 순회하면서
+#    name, number인 경우에만 Base64 변환
+df = df.withColumn(
+    "after_map",
+    F.transform_values(
+        F.col("after_map"),
+        lambda key, value:
+            F.when(
+                # name 또는 number 컬럼이고 값이 null이 아닐 경우
+                key.isin("name", "number") & value.isNotNull(),
+
+                # Base64 변환
+                F.base64(
+                    F.encode(value, "UTF-8")
+                )
+            ).otherwise(
+                # 그 외 컬럼은 기존 값 그대로 유지
+                value
+            )
+    )
+)
+
+
+# 3. 다시 JSON String으로 변환
+df = df.withColumn(
+    "after",
+    F.to_json(F.col("after_map"))
+).drop("after_map")
+이 방법의 중요한 장점은 없는 컬럼은 건드리지 않는다는 것입니다.
+예를 들어 UPDATE 메시지가:
+{
+  "after": "{\"name\":\"홍길동\"}"
+}
+이라면 number를 추가하지 않습니다.
+결과:
+{
+  "after": "{\"name\":\"7ZmN6ri464+Z\"}"
+}
+이렇게 되지 않습니다:
+{
+  "after": {
+    "name": "7ZmN6ri464+Z",
+    "number": null
+  }
+}
+즉 CDC의 partial update 구조가 그대로 유지됩니다.
+또한 다음처럼 null인 경우:
+{
+  "after": {
+    "name": null
+  }
+}
+결과도:
+{
+  "after": {
+    "name": null
+  }
+}
+입니다.
+다만 한 가지 매우 중요합니다
+Oracle CDC의 after에 이런 식으로 타입이 섞여 있다면:
+{
+  "id": 100,
+  "name": "홍길동",
+  "number": "010-1111-1111",
+  "salary": 5000000,
+  "active": true
+}
+MapType(StringType(), StringType())으로 파싱하면 id, salary, active 등도 문자열화될 수 있습니다.
+즉 원래:
+{
+  "id": 100,
+  "active": true
+}
+였던 데이터가 다시 JSON으로 만들 때:
+{
+  "id": "100",
+  "active": "true"
+}
+처럼 타입이 바뀔 수 있습니다.
+이게 문제가 된다면 MapType 방식은 사용하면 안 됩니다.
+그 경우에는 원본 JSON의 다른 타입을 전혀 건드리지 않고 name, number만 바꾸는 방식이 필요합니다. PySpark에서는 다음처럼 JSON 자체를 처리하는 UDF를 사용하는 게 구현상 가장 단순합니다.
+import json
+import base64
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import StringType
+
+
+@F.udf(returnType=StringType())
+def encode_after(after_json):
+
+    # after 자체가 null이면 null 그대로 반환
+    if after_json is None:
+        return None
+
+    # JSON String -> Python dict
+    after = json.loads(after_json)
+
+    # name이 실제 after에 존재하는 경우에만 처리
+    if "name" in after and after["name"] is not None:
+        after["name"] = base64.b64encode(
+            str(after["name"]).encode("UTF-8")
+        ).decode("UTF-8")
+
+    # number가 실제 after에 존재하는 경우에만 처리
+    if "number" in after and after["number"] is not None:
+        after["number"] = base64.b64encode(
+            str(after["number"]).encode("UTF-8")
+        ).decode("UTF-8")
+
+    # 다시 JSON String으로 변환
+    return json.dumps(
+        after,
+        ensure_ascii=False,
+        separators=(",", ":")
+    )
+
+
+df = df.withColumn(
+    "after",
+    encode_after(F.col("after"))
+)
+이 방식은 CDC 구조에 정확하게 대응합니다.
+INSERT
+{name, number, age, address}
+       ↓
+name, number만 Base64
+       ↓
+나머지 타입/컬럼 유지
+
+
+UPDATE name
+{name}
+       ↓
+name만 Base64
+       ↓
+number 컬럼 추가 안 함
+
+
+UPDATE number
+{number}
+       ↓
+number만 Base64
+       ↓
+name 컬럼 추가 안 함
+
+
+UPDATE address
+{address}
+       ↓
+변경할 대상 없음
+       ↓
+그대로 유지
+현재 구조에서는
+저라면 다음 기준으로 선택하겠습니다.
+after 데이터
+방법
+모든 값이 사실상 String
+MapType + transform_values 추천
+Number/String/Boolean 타입이 섞여 있고 타입 보존 필요
+JSON UDF
+데이터량이 매우 많고 실시간 처리 성능이 중요
+Python UDF는 피하고 별도 최적화 필요
+특히 지금 Kafka → Python Spark → Kudu 실시간 CDC라면 Python UDF는 처리량이 커졌을 때 병목이 될 수 있습니다. 따라서 after의 실제 JSON 샘플 1~2개와 df.printSchema() 결과를 보면, Python UDF 없이 Spark native function만으로 partial update 구조를 유지하면서 name, number만 변환하는 쪽으로 더 정확하게 설계할 수 있습니다.
