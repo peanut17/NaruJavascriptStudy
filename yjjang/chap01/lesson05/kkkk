@@ -1,0 +1,145 @@
+
+데이터가 **매우 큰 HashMap**이라면 ObjectMapper.writeValue()로 한 번에 JSON 문자열을 만드는 방식은 피하는 게 좋습니다. Jackson JsonGenerator로 파일에 스트리밍하면서 한 건씩 기록하면 추가적인 대형 JSON 문자열을 메모리에 만들지 않아 훨씬 안전합니다.
+예를 들어 HashMap<String, Object> 기준입니다.
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Map;
+
+@Service
+public class JsonFileService {
+
+    private final ObjectMapper objectMapper;
+
+    public JsonFileService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
+    public void writeHashMapToJson(
+            Map<String, Object> data,
+            String filePath
+    ) throws IOException {
+
+        JsonFactory jsonFactory = objectMapper.getFactory();
+
+        // BufferedOutputStream으로 디스크 I/O 횟수 감소
+        try (BufferedOutputStream outputStream =
+                     new BufferedOutputStream(
+                             new FileOutputStream(filePath),
+                             1024 * 1024); // 1MB buffer
+
+             JsonGenerator generator =
+                     jsonFactory.createGenerator(outputStream)) {
+
+            // JSON 객체 시작 {
+            generator.writeStartObject();
+
+            for (Map.Entry<String, Object> entry : data.entrySet()) {
+
+                // key
+                generator.writeFieldName(entry.getKey());
+
+                // value
+                objectMapper.writeValue(generator, entry.getValue());
+            }
+
+            // JSON 객체 종료 }
+            generator.writeEndObject();
+
+            generator.flush();
+        }
+    }
+}
+사용은 이렇게 하면 됩니다.
+Map<String, Object> data = new HashMap<>();
+
+data.put("user1", user1);
+data.put("user2", user2);
+data.put("user3", user3);
+
+// 실제로는 대량 데이터
+
+jsonFileService.writeHashMapToJson(
+        data,
+        "/data/export/result.json"
+);
+생성되는 JSON은 이런 구조입니다.
+{
+  "user1": {
+    "name": "홍길동",
+    "age": 30
+  },
+  "user2": {
+    "name": "김철수",
+    "age": 35
+  },
+  "user3": {
+    "name": "이영희",
+    "age": 28
+  }
+}
+데이터가 정말 크다면 더 중요한 부분
+위 코드는 JSON 파일을 만드는 과정에서 메모리를 추가로 크게 사용하지 않는다는 장점이 있습니다. 하지만 이미 데이터 전체가 HashMap 안에 들어가 있다면 HashMap 자체는 여전히 메모리에 존재합니다.
+예를 들어 데이터가 20GB라면,
+DB / 원본 데이터
+       ↓
+20GB HashMap
+       ↓
+JsonGenerator
+       ↓
+result.json
+이 구조에서는 JSON 생성은 스트리밍이어도 20GB HashMap 때문에 OOM이 발생할 수 있습니다.
+데이터가 수백만~수천만 건 수준이라면 가장 좋은 구조는 애초에 전체 데이터를 HashMap으로 만들지 않는 것입니다.
+DB / Kafka / 조회 결과
+        ↓
+   1건 또는 Batch
+        ↓
+ JsonGenerator
+        ↓
+     JSON 파일
+예를 들어 데이터가 List<HashMap<String, Object>> 형태라면 JSON Array로 한 건씩 기록할 수 있습니다.
+public void writeLargeDataToJson(
+        Iterable<Map<String, Object>> data,
+        String filePath
+) throws IOException {
+
+    try (BufferedOutputStream outputStream =
+                 new BufferedOutputStream(
+                         new FileOutputStream(filePath),
+                         1024 * 1024);
+
+         JsonGenerator generator =
+                 objectMapper.getFactory()
+                         .createGenerator(outputStream)) {
+
+        generator.writeStartArray();
+
+        for (Map<String, Object> row : data) {
+            objectMapper.writeValue(generator, row);
+        }
+
+        generator.writeEndArray();
+        generator.flush();
+    }
+}
+결과는 다음처럼 됩니다.
+[
+  {
+    "id": 1,
+    "name": "홍길동"
+  },
+  {
+    "id": 2,
+    "name": "김철수"
+  },
+  {
+    "id": 3,
+    "name": "이영희"
+  }
+]
+대용량 기준으로는 두 번째 방식처럼 JsonGenerator + BufferedOutputStream + 건별/배치 처리를 권장합니다. 특히 지금 데이터가 Oracle/ClickHouse/Kudu 같은 DB에서 조회되어 HashMap에 쌓이는 구조라면, ResultSet → HashMap 전체 적재 → JSON이 아니라 ResultSet → 1,000~10,000건씩 처리 → JSON 파일 구조로 바꾸는 게 핵심입니다. 그러면 데이터가 수십 GB여도 JVM Heap을 크게 늘리지 않고 처리할 수 있습니다.
