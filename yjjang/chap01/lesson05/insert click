@@ -1,0 +1,175 @@
+
+Kudu SELECT
+30만 건 이상 조회
+Spring Boot ETL
+List<HashMap<String, Object>>
+5,000건 단위 배치 분할
+ClickHouse JDBC Batch
+PreparedStatement + addBatch + executeBatch
+이 구조에서는 30만 건을 5,000건씩 60번 처리합니다. 배치 크기는 초기값이며, 실제 행 크기와 성능 측정에 따라 조정해야 합니다.
+3. 개선 코드: MyBatis 조회 유지 + JDBC Batch INSERT
+기존 List<HashMap<String, Object>> 자료구조를 그대로 사용할 수 있습니다.
+① ClickHouse INSERT 전용 Service
+아래 코드는 Spring Boot에서 clickHouseDataSource라는 별도 DataSource가 구성되어 있다는 전제입니다.
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.HashMap;
+import java.util.List;
+
+@Slf4j
+@Service
+public class ClickHouseInsertService {
+
+    private final DataSource dataSource;
+
+    public ClickHouseInsertService(
+            @Qualifier("clickHouseDataSource") DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    private static final int BATCH_SIZE = 5000;
+
+    public void insert(
+            List<HashMap<String, Object>> dataList) throws SQLException {
+
+        String sql = """
+            INSERT INTO target_table
+            (id, name, amount, created_at)
+            VALUES (?, ?, ?, ?)
+            """;
+
+        long totalStart = System.currentTimeMillis();
+        int total = dataList.size();
+        int batchCount = 0;
+
+        log.info("ClickHouse INSERT START total={}", total);
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            for (int i = 0; i < total; i++) {
+
+                HashMap<String, Object> row = dataList.get(i);
+
+                // 실제 ClickHouse 컬럼 타입에 맞게 조정
+                ps.setObject(1, row.get("id"));
+
+                if (row.get("name") == null) {
+                    ps.setNull(2, Types.VARCHAR);
+                } else {
+                    ps.setString(2, row.get("name").toString());
+                }
+
+                ps.setObject(3, row.get("amount"));
+                ps.setObject(4, row.get("created_at"));
+
+                ps.addBatch();
+
+                if ((i + 1) % BATCH_SIZE == 0) {
+
+                    long batchStart = System.currentTimeMillis();
+
+                    log.info("Batch START batch={}, rows={}",
+                            ++batchCount, i + 1);
+
+                    ps.executeBatch();
+                    ps.clearBatch();
+
+                    log.info("Batch END batch={}, elapsed={}ms",
+                            batchCount,
+                            System.currentTimeMillis() - batchStart);
+                }
+            }
+
+            // 마지막 잔여 데이터 처리
+            if (total % BATCH_SIZE != 0) {
+
+                long batchStart = System.currentTimeMillis();
+
+                ps.executeBatch();
+                ps.clearBatch();
+
+                log.info("Last Batch END elapsed={}ms",
+                        System.currentTimeMillis() - batchStart);
+            }
+        }
+
+        log.info("ClickHouse INSERT END total={}, elapsed={}ms",
+                total,
+                System.currentTimeMillis() - totalStart);
+    }
+}
+
+
+이 코드에서 중요한 부분은 다음입니다.
+PreparedStatement를 한 번 생성합니다.
+행마다 addBatch()를 호출합니다.
+5,000건마다 executeBatch()를 실행합니다.
+매 배치의 실행 시간을 기록합니다.
+List<HashMap> 구조를 변경하지 않습니다.
+setObject()는 컬럼 타입에 따라 변환 오류가 발생할 수 있으므로 실제 ClickHouse 테이블 스키마에 맞춰 조정해야 합니다. 특히 DateTime64, Decimal, Nullable, UInt64 컬럼은 주의해야 합니다.
+공식 ClickHouse JDBC 문서에서도 PreparedStatement와 addBatch(), executeBatch() 방식을 안내하고 있습니다. 
+② 기존 ETL Service에서 호출
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class KuduToClickHouseEtlService {
+
+    private final KuduMapper kuduMapper;
+    private final ClickHouseInsertService clickHouseInsertService;
+
+    public void executeEtl() throws SQLException {
+
+        long start = System.currentTimeMillis();
+
+        // 기존 Kudu SELECT 유지
+        List<HashMap<String, Object>> dataList =
+                kuduMapper.selectKuduData();
+
+        log.info("Kudu SELECT 완료 count={}", dataList.size());
+
+        if (dataList.isEmpty()) {
+            return;
+        }
+
+        // ClickHouse JDBC Batch INSERT
+        clickHouseInsertService.insert(dataList);
+
+        log.info("ETL 완료 elapsed={}ms",
+                System.currentTimeMillis() - start);
+    }
+}
+
+
+여기서 KuduMapper는 기존 프로젝트의 조회 컴포넌트를 나타내는 예시입니다.
+4. JDBC Batch로 변경하기 어렵다면?
+현재 프로젝트 구조상 MyBatis Mapper XML을 유지해야 한다면, 임시 개선 방법도 있습니다.
+30만 건을 한 번에 foreach로 처리하지 않고, 1,000건씩 분할해서 Mapper를 호출하는 것입니다.
+
+int batchSize = 1000;
+
+for (int start = 0; start < dataList.size(); start += batchSize) {
+
+    int end = Math.min(start + batchSize, dataList.size());
+
+    List<HashMap<String, Object>> batch =
+            dataList.subList(start, end);
+
+    long begin = System.currentTimeMillis();
+
+    clickHouseMapper.insertBatch(batch);
+
+    log.info("INSERT batch={}~{}, elapsed={}ms",
+            start, end,
+            System.currentTimeMillis() - begin);
+}
