@@ -1,0 +1,261 @@
+
+기존 Java가 apt install로 설치되었고, 신규 JDK는 tar.gz 파일로 설치했다면 다음 순서로 진행하면 됩니다.
+권장 순서: 신규 JDK 기본값 설정 → 운영 서비스 전환 → 정상 동작 확인 → 기존 apt Java 삭제
+기존 Java를 먼저 삭제하면 운영 서비스나 다른 프로그램에 문제가 발생할 수 있으므로, 신규 JDK로 완전히 전환한 뒤 삭제하는 것이 안전합니다.
+1. 기존 Java 설치 정보 확인
+먼저 기존 Java 버전과 설치 패키지를 확인합니다.
+java -version
+which java
+readlink -f "$(which java)"
+설치된 Java 패키지를 확인합니다.
+dpkg -l | grep -Ei 'openjdk|oracle-java|jdk|jre'
+예상 결과:
+ii  openjdk-8-jdk        8u4xx-...
+ii  openjdk-8-jdk-headless  8u4xx-...
+ii  openjdk-8-jre        8u4xx-...
+ii  openjdk-8-jre-headless  8u4xx-...
+실제 설치된 패키지명은 환경에 따라 다를 수 있습니다.
+기존 Java 경로는 다음과 같을 수 있습니다.
+/usr/lib/jvm/java-8-openjdk-amd64
+이 경로는 apt가 관리하므로 직접 rm -rf로 삭제하면 안 됩니다.
+2. 신규 JDK 설치 상태 확인
+테스트 서비스에 이미 신규 JDK를 적용했다고 했으므로, 해당 경로를 그대로 사용하겠습니다.
+예시:
+/opt/java/jdk1.8.0_5x
+신규 Java 버전 확인:
+/opt/java/jdk1.8.0_5x/bin/java -version
+신규 JDK에 javac도 포함되어 있는지 확인합니다.
+/opt/java/jdk1.8.0_5x/bin/javac -version
+정상적으로 출력되면 다음 단계로 진행합니다.
+3. 신규 JDK를 Ubuntu 기본 Java로 설정
+Ubuntu에서는 update-alternatives를 이용하여 기본 Java를 변경할 수 있습니다.
+① 현재 alternatives 확인
+sudo update-alternatives --display java
+예상 결과:
+java - auto mode
+  link best version is /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+  link currently points to /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+② 신규 Java 등록
+sudo update-alternatives --install \
+    /usr/bin/java java \
+    /opt/java/jdk1.8.0_5x/bin/java 2000
+신규 JDK의 javac도 등록합니다.
+sudo update-alternatives --install \
+    /usr/bin/javac javac \
+    /opt/java/jdk1.8.0_5x/bin/javac 2000
+2000은 우선순위입니다. 이후 --set으로 직접 선택할 것이므로 반드시 2000일 필요는 없습니다.
+③ 신규 Java를 기본값으로 설정
+sudo update-alternatives --set java \
+    /opt/java/jdk1.8.0_5x/bin/java
+sudo update-alternatives --set javac \
+    /opt/java/jdk1.8.0_5x/bin/javac
+④ 변경 확인
+java -version
+readlink -f "$(command -v java)"
+예상 결과:
+/opt/java/jdk1.8.0_5x/bin/java
+이제 일반적인 java 명령어는 신규 JDK를 사용합니다.
+주의: 시스템 기본 Java를 변경해도 이미 실행 중인 Java 프로세스는 자동으로 변경되지 않습니다.
+4. JAVA_HOME 설정 변경
+update-alternatives는 JAVA_HOME을 자동으로 변경하지 않습니다.
+현재 설정을 확인합니다.
+echo "$JAVA_HOME"
+설정 파일에서 기존 Java 경로를 사용하는지 확인합니다.
+sudo grep -Rn 'JAVA_HOME' \
+    /etc/environment \
+    /etc/profile \
+    /etc/profile.d \
+    2>/dev/null
+예를 들어 /etc/environment에 다음과 같이 설정되어 있다면:
+JAVA_HOME="/usr/lib/jvm/java-8-openjdk-amd64"
+신규 경로로 변경합니다.
+JAVA_HOME="/opt/java/jdk1.8.0_5x"
+/etc/environment는 셸 스크립트가 아니므로 export를 붙이지 않습니다.
+설정이 적용되는 시점은 로그인 방식과 서비스 실행 환경에 따라 다릅니다.
+또한 운영 서비스의 startup.sh에서 별도로 JAVA_HOME을 지정하고 있다면 해당 설정도 수정해야 합니다.
+5. 운영 서비스에 신규 Java 적용
+운영 서비스의 startup.sh를 확인합니다.
+cat /app/prod/startup.sh
+다음과 같이 Java를 실행한다면:
+java -jar prod.jar
+시스템 기본 Java 변경 후 운영 서비스를 재시작하면 신규 JDK를 사용할 수 있습니다.
+다만 기존 Java의 절대경로를 사용하는 경우에는 수정이 필요합니다.
+변경 전
+/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java -jar prod.jar
+변경 후
+/opt/java/jdk1.8.0_5x/bin/java -jar prod.jar
+기존 JVM 옵션과 애플리케이션 인수는 그대로 유지해야 합니다.
+운영 서비스는 점검 시간에 정상 종료 후 재시작하세요.
+6. 기존 apt Java 삭제 전 검증
+신규 Java로 운영 서비스를 재시작했다면 실제 실행 경로를 확인합니다.
+ps -ef | grep '[j]ava'
+운영 서비스 PID가 12345라고 가정하면:
+readlink -f /proc/12345/exe
+예상 결과:
+/opt/java/jdk1.8.0_5x/bin/java
+테스트 서비스도 같은 방법으로 확인합니다.
+이때 운영·테스트 서비스뿐 아니라 다른 배치 프로그램, 스케줄러, 관리 도구가 기존 Java를 사용하지 않는지도 확인해야 합니다.
+특히 다음 명령어로 기존 Java 경로가 설정 파일에 남아 있는지 점검할 수 있습니다.
+sudo grep -RnE \
+    'java-8-openjdk|jdk1\.8\.0_4' \
+    /etc/systemd/system \
+    /etc/default \
+    /etc/profile.d \
+    /app \
+    2>/dev/null
+/app은 실제 애플리케이션 설치 경로로 변경하세요.
+7. 기존 apt Java 삭제
+운영 서비스까지 정상적으로 신규 JDK를 사용하고 있다면 기존 apt 패키지를 삭제합니다.
+① 삭제 대상 확인
+dpkg -l | grep -E '^ii +openjdk-8'
+예를 들어 다음 패키지가 설치되어 있다고 가정하겠습니다.
+openjdk-8-jdk
+openjdk-8-jdk-headless
+openjdk-8-jre
+openjdk-8-jre-headless
+② 삭제 시뮬레이션
+바로 삭제하지 말고 먼저 어떤 패키지가 제거되는지 확인합니다.
+sudo apt-get -s remove \
+    openjdk-8-jdk \
+    openjdk-8-jdk-headless \
+    openjdk-8-jre \
+    openjdk-8-jre-headless
+실제 설치된 패키지만 명령에 포함하세요.
+중요: apt는 수동으로 설치한 /opt/java/jdk1.8.0_5x를 패키지 의존성을 충족하는 Java로 인식하지 않을 수 있습니다.
+따라서 삭제 시뮬레이션 결과에 운영 애플리케이션이나 필요한 패키지가 포함되어 있다면 삭제하지 않아야 합니다.
+③ 기존 Java 제거
+시뮬레이션 결과에 문제가 없다면:
+sudo apt-get remove \
+    openjdk-8-jdk \
+    openjdk-8-jdk-headless \
+    openjdk-8-jre \
+    openjdk-8-jre-headless
+이 명령은 해당 패키지가 설치되어 있는 경우의 예시입니다.
+purge는 패키지 설정 파일까지 제거하므로, 단순히 기존 JDK를 제거하려는 목적이라면 우선 remove를 권장합니다.
+폐쇄망 환경에서도 설치된 패키지를 제거할 수 있지만, apt가 의존성 문제를 해결하기 위해 추가 패키지 작업을 요구할 수 있으므로 출력 내용을 확인해야 합니다.
+이 단계에서는 apt autoremove를 바로 실행하지 마세요. 불필요한 패키지로 판단된 항목에 다른 프로그램이 의존하고 있을 수 있습니다.
+8. 최종 Java 확인
+기존 Java 삭제 후 다음 명령어를 실행합니다.
+java -version
+readlink -f "$(command -v java)"
+javac -version
+update-alternatives --display java
+정상 결과 예시:
+java version "1.8.0_5x"
+/opt/java/jdk1.8.0_5x/bin/java
+추가로:
+dpkg -l | grep -E '^ii +openjdk-8'
+기존 OpenJDK 8 패키지가 더 이상 설치되어 있지 않은지 확인합니다.
+전체 작업 순서 요약
+순서
+작업
+운영 영향
+1
+신규 JDK 설치 및 테스트 완료
+완료
+2
+update-alternatives에 신규 JDK 등록
+없음
+3
+시스템 기본 Java 변경
+이후 실행되는 프로그램에 영향 가능
+4
+JAVA_HOME 및 운영 스크립트 변경
+설정 변경
+5
+운영 서비스 재시작
+일시 중단
+6
+신규 Java 정상 동작 확인
+없음
+7
+기존 apt Java 삭제 시뮬레이션
+없음
+8
+기존 apt Java 제거
+다른 Java 의존 프로그램에 영향 가능
+9
+최종 Java 버전 및 서비스 확인
+없음
+꼭 알아둘 점
+기존 Java를 apt로 설치했고 신규 Java를 tar.gz로 설치했다면, 단순히 신규 Java를 기본값으로 설정하는 것과 기존 Java 패키지를 완전히 제거하는 것은 별개의 작업입니다.
+특히 폐쇄망 운영 서버에서는 구버전 제거 후 문제가 발생하면 apt 패키지를 다시 구하기 어려울 수 있습니다.
+따라서 가능하다면 기존 .deb 패키지를 확보해 두고, 운영 서비스가 신규 JDK에서 충분히 검증된 뒤 제거하는 것을 권장합니다.
+현재 단계에서는 3번의 update-alternatives 설정부터 진행하면 됩니다. 이미 테스트에 사용한 신규 JDK 디렉터리는 이동하거나 삭제하지 마세요.
+
+
+
+해당 경로 어디에도 JAVA_HOME 설정이 없다면 Ubuntu 서버에 시스템 공통 JAVA_HOME이 설정되어 있지 않을 가능성이 높습니다.
+하지만 문제가 있는 것은 아닙니다. JAVA_HOME이 없어도 Java는 정상적으로 실행될 수 있습니다.
+1. JAVA_HOME이 없어도 Java가 실행되는 이유
+Ubuntu에서 apt install로 Java를 설치하면 일반적으로 다음과 같은 구조로 설정됩니다.
+/usr/bin/java
+    ↓
+/etc/alternatives/java
+    ↓
+/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+따라서 JAVA_HOME을 설정하지 않아도 다음 명령어가 정상 실행됩니다.
+java -version
+이는 Ubuntu가 PATH에 등록된 /usr/bin/java를 찾아 실행하기 때문입니다.
+2. JAVA_HOME을 새로 설정해야 할까?
+현재 운영 서비스가 JAVA_HOME 없이 정상 동작했다면 반드시 새로 설정할 필요는 없습니다.
+신규 JDK를 시스템 기본 Java로 등록하는 것만으로 충분할 수 있습니다.
+① 신규 JDK 등록
+sudo update-alternatives --install \
+    /usr/bin/java java \
+    /opt/java/jdk1.8.0_5x/bin/java 2000
+② 신규 JDK를 기본값으로 변경
+sudo update-alternatives --set java \
+    /opt/java/jdk1.8.0_5x/bin/java
+③ 변경 확인
+java -version
+readlink -f "$(command -v java)"
+결과:
+/opt/java/jdk1.8.0_5x/bin/java
+이렇게 나오면 시스템 기본 Java 변경은 완료된 것입니다.
+3. 다만 서비스 스크립트는 별도로 확인해야 합니다
+현재 서비스가 startup.sh로 실행된다고 했으므로 다음 명령어로 확인하세요.
+grep -nE 'JAVA_HOME|java|PATH' /서비스경로/startup.sh
+실행 방식에 따라 다음과 같이 달라집니다.
+startup.sh 실행 방식
+추가 수정 필요 여부
+java -jar app.jar
+일반적으로 불필요
+nohup java -jar app.jar &
+일반적으로 불필요
+$JAVA_HOME/bin/java -jar app.jar
+JAVA_HOME 설정 필요
+/usr/lib/jvm/기존경로/bin/java -jar app.jar
+신규 JDK 경로로 변경 필요
+java 명령어를 사용하는 경우에도 스크립트 내부에서 PATH를 변경한다면 별도 확인이 필요합니다.
+4. 현재 실행 중인 서비스의 Java 경로 확인
+가장 정확한 방법은 실제 Java 프로세스를 확인하는 것입니다.
+ps -ef | grep '[j]ava'
+운영 서비스의 PID를 확인한 다음:
+readlink -f /proc/운영서비스PID/exe
+신규 JDK 경로가 나오면 정상적으로 적용된 것입니다.
+/opt/java/jdk1.8.0_5x/bin/java
+기존 JDK 경로가 나온다면 운영 서비스가 아직 기존 Java로 실행 중인 것입니다.
+이 경우 실행 스크립트를 확인하고 운영 서비스를 재시작해야 합니다.
+5. JAVA_HOME이 다른 곳에 설정되어 있는지도 확인
+앞서 검색한 세 경로 외에도 사용자별 설정 파일이나 서비스 실행 스크립트에 설정되어 있을 수 있습니다.
+현재 쉘에서 확인:
+echo "$JAVA_HOME"
+env | grep '^JAVA_HOME='
+사용자 설정 파일 확인:
+grep -n 'JAVA_HOME' \
+    ~/.bashrc \
+    ~/.profile \
+    ~/.bash_profile \
+    2>/dev/null
+운영 서비스 실행 계정이 현재 로그인 계정과 다르다면 해당 계정의 환경도 별도로 확인해야 합니다.
+결론
+현재 상황에서는 다음과 같이 진행하면 됩니다.
+JAVA_HOME 설정이 없다면 굳이 새로 만들 필요는 없습니다.
+update-alternatives로 신규 JDK를 기본 Java로 설정합니다.
+운영 서비스의 startup.sh에서 기존 Java 절대경로를 사용하는지 확인합니다.
+운영 서비스를 재시작합니다.
+/proc/PID/exe로 신규 JDK가 실제 적용되었는지 확인합니다.
+정상 동작과 의존성을 확인한 뒤 기존 apt Java 패키지를 제거합니다.
+특히 중요한 것은 JAVA_HOME 설정 여부보다 readlink -f "$(command -v java)"와 실제 운영 프로세스의 Java 실행 경로입니다. 이 두 가지가 신규 JDK를 가리키는지 확인하면 됩니다.
+  
